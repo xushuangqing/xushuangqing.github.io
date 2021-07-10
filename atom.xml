@@ -1,18 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
-    <id>https://https://xushuangqing.github.io/</id>
+    <id>https://xushuangqing.github.io</id>
     <title>卖萌凉</title>
-    <updated>2021-07-10T05:38:51.537Z</updated>
+    <updated>2021-07-10T05:41:52.825Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
-    <link rel="alternate" href="https://https://xushuangqing.github.io/"/>
-    <link rel="self" href="https://https://xushuangqing.github.io/atom.xml"/>
-    <logo>https://https://xushuangqing.github.io/images/avatar.png</logo>
-    <icon>https://https://xushuangqing.github.io/favicon.ico</icon>
+    <link rel="alternate" href="https://xushuangqing.github.io"/>
+    <link rel="self" href="https://xushuangqing.github.io/atom.xml"/>
+    <logo>https://xushuangqing.github.io/images/avatar.png</logo>
+    <icon>https://xushuangqing.github.io/favicon.ico</icon>
     <rights>All rights reserved 2021, 卖萌凉</rights>
     <entry>
         <title type="html"><![CDATA[UIScrollView滚动动画]]></title>
-        <id>https://https://xushuangqing.github.io/post/uiscrollview-gun-dong-dong-hua/</id>
-        <link href="https://https://xushuangqing.github.io/post/uiscrollview-gun-dong-dong-hua/">
+        <id>https://xushuangqing.github.io/post/uiscrollview-gun-dong-dong-hua/</id>
+        <link href="https://xushuangqing.github.io/post/uiscrollview-gun-dong-dong-hua/">
         </link>
         <updated>2015-07-10T03:58:42.000Z</updated>
         <content type="html"><![CDATA[<!-- more -->
