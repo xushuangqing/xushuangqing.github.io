@@ -1,0 +1,281 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>从 Exported Symbols 应用于包大小优化说到符号绑定 | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">从 Exported Symbols 应用于包大小优化说到符号绑定</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2020-06-15</span>
+            
+          </div>
+          <div class="post-content">
+            <p>之前写过 <a href="https://www.jianshu.com/p/11710e7ab661">Xcode中和symbols有关的几个设置</a>，天真地以为只要把和 <code>STRIP_INSTALLED_PRODUCT</code> 打开，且选择 <code>STRIP_STYLE</code> 为 All Symbols 就能让包大小在“符号”层面达到最优。毕竟剥离掉的是“All Symbols”啊。</p>
+<p>直到经人指点发现了 <code>EXPORTED_SYMBOLS_FILE</code> 这个配置，才发现 Strip 能控制的并非全部符号。合理配置 Exported Symbols，可以进一步在“符号”层面优化二进制文件的大小。</p>
+<p>为了便于解释，我们首先来介绍下动态库的<code>EXPORTED_SYMBOLS_FILE</code>配置，再发散到可执行文件上。</p>
+<h2 id="exported_symbols_file-配置项是什么">EXPORTED_SYMBOLS_FILE 配置项是什么？</h2>
+<p><code>EXPORTED_SYMBOLS_FILE</code> 是 Xcode Build Settings 中的一个配置项。默认为空。</p>
+<figure data-type="image" tabindex="1"><img src="https://xushuangqing.github.io/post-images/cong--Exported-Symbols--ying-yong-yu-bao-da-xiao-you-hua-shuo-dao-fu-hao-bang-ding/164542-714c6932db29e791.png" alt="" loading="lazy"></figure>
+<p>Xcode 的文档中，我们可以读到官方对这个配置项的解释：</p>
+<blockquote>
+<p>EXPORTED_SYMBOLS_FILE<br>
+This is a project-relative path to a file that lists the symbols to export. See <code>ld -exported_symbols_list</code> for details on exporting symbols.</p>
+</blockquote>
+<p>需要在 <code>EXPORTED_SYMBOLS_FILE</code> 填入的是一个文件路径，这个文件以白名单的形式列出了需要被 export 的所有符号。未被列入的符号将不被 export。</p>
+<p>接着去看 man ld 中对 <code>-exported_symbols_list</code> 的解释：</p>
+<blockquote>
+<p><strong>-exported_symbols_list</strong> filename<br>
+The specified filename contains a list of global symbol names that will remain as global symbols in the output file.  All other global symbols will be treated as if they were marked as <code>__private_extern__</code> (aka visibility=hidden) and will not be global in the output file. The symbol names listed in filename must be one per line.  Leading and trailing white space are not part of the symbol name.  Lines starting with # are ignored, as are lines with only white space.  Some wildcards (similar to shell file matching) are supported.  The * matches zero or more characters.  The ? matches one character.  [abc] matches one character which must be an 'a', 'b', or 'c'.  [a-z] matches any single lower case letter from 'a' to 'z'.</p>
+</blockquote>
+<p>也就是说，如果设置了 <code>EXPORTED_SYMBOLS_FILE</code> 配置项，那么不在  <code>EXPORTED_SYMBOLS_FILE</code> 中的符号，就会被认为是 <code>__private_extern__</code> 的。</p>
+<h2 id="被导出的符号存在哪里">被导出的符号存在哪里？</h2>
+<p><img src="https://xushuangqing.github.io/post-images/cong--Exported-Symbols--ying-yong-yu-bao-da-xiao-you-hua-shuo-dao-fu-hao-bang-ding/164542-90aa744a0c511bd1.png" alt="" loading="lazy"><br>
+通过对比可以发现，被导出的符号存在动态库的 Export Info 中。</p>
+<h2 id="这些符号是怎么被用到的">这些符号是怎么被用到的？</h2>
+<p>动态库的“符号”是怎么被用到的？</p>
+<p>可以想象，如果可执行文件 A 想要调用动态库中的一个函数 B，A 在静态的编译链接完成后，并不知道 B 函数在内存中的地址。B 函数的地址也是运行时计算得到的。这个过程叫做“绑定”。</p>
+<p>Export Info 中的信息就是必不可少的一环。</p>
+<h2 id="走一遍动态库函数调用流程">走一遍动态库函数调用流程</h2>
+<p>那么现在我们就来走一遍动态库中函数调用的流程。</p>
+<p>可执行文件 XSQExportIOSDemo 将调用动态库 XSQFramework 中的方法 _helloFramework。</p>
+<figure data-type="image" tabindex="2"><img src="https://xushuangqing.github.io/post-images/cong--Exported-Symbols--ying-yong-yu-bao-da-xiao-you-hua-shuo-dao-fu-hao-bang-ding/164542-f3b8993fc4908db2.png" alt="" loading="lazy"></figure>
+<h3 id="1-__text-__text-️-__text-__stubs">1、__TEXT, __text ➡️ __TEXT, __stubs</h3>
+<p>可以在 XSQExportIOSDemo 形成可执行文件后的 __TEXT, __text 段中，找到 helloFramework() 这行调用对应的汇编。</p>
+<figure data-type="image" tabindex="3"><img src="https://xushuangqing.github.io/post-images/cong--Exported-Symbols--ying-yong-yu-bao-da-xiao-you-hua-shuo-dao-fu-hao-bang-ding/164542-89589f550a641b39.png" alt="" loading="lazy"></figure>
+<p>bl 指令会使程序跳到 0x100006568 的地址中执行，这个地址位于 __TEXT, __stubs 节。</p>
+<h3 id="2-__text-__stubs-️-__data-__la_symbol_ptr">2、__TEXT, __stubs ➡️ __DATA, __la_symbol_ptr</h3>
+<p>查看 0x100006568 地址中的内容，<br>
+<img src="https://xushuangqing.github.io/post-images/cong--Exported-Symbols--ying-yong-yu-bao-da-xiao-you-hua-shuo-dao-fu-hao-bang-ding/164542-0f8075545559c6e3.png" alt="" loading="lazy"></p>
+<p>nop 为空命令</p>
+<p>ldr 这一行的意思是，将当前 pc 寄存器中的值，加上 0x1aac，再存到 x16 寄存器中</p>
+<p>br 这一行的意思是，跳转到 x16 寄存器的值指向的地址。</p>
+<p>x16 中存储的数，将会是 0x10000656c + 0x1aac = 0x100008018。0x100008018 位于 __DATA, __la_symbol_ptr 节。</p>
+<h3 id="3-__data-__la_symbol_ptr-️-__text-__stub_helper">3、__DATA, __la_symbol_ptr ➡️ __TEXT, __stub_helper</h3>
+<p>__la_symbol_ptr 节是一系列指针，这些指针指向的，是某一个指令的地址。<br>
+<img src="https://xushuangqing.github.io/post-images/cong--Exported-Symbols--ying-yong-yu-bao-da-xiao-you-hua-shuo-dao-fu-hao-bang-ding/164542-23ab44e52d97d65a.png" alt="" loading="lazy"></p>
+<p>0x100008018 对应的 0x100006604，位于 __TEXT, __stub_helper 节。<br>
+<img src="https://xushuangqing.github.io/post-images/cong--Exported-Symbols--ying-yong-yu-bao-da-xiao-you-hua-shuo-dao-fu-hao-bang-ding/164542-51bf6e526c7ee396.png" alt="" loading="lazy"></p>
+<h3 id="4-__text-__stub_helper-️-dyld_stub_binder">4、__TEXT, __stub_helper ➡️ dyld_stub_binder</h3>
+<p>接下来，指令会随着 b 0x1000065ec 指令，跳转到 0x1000065ec，这个地址是 __stub_helper 节的开头。</p>
+<p>如果用 Hopper 查看，会发现指令经过一些准备工作，最终会跳转到 dyld_stub_binder 函数。<br>
+<img src="https://xushuangqing.github.io/post-images/cong--Exported-Symbols--ying-yong-yu-bao-da-xiao-you-hua-shuo-dao-fu-hao-bang-ding/164542-b54f9dfe6df7a9a4.png" alt="" loading="lazy"></p>
+<p>dyld_stub_binder 就是用于动态绑定的函数。刚才的路途中，我们看到了 __la_symbol_ptr 节。__la_symbol_ptr 映射到内存后，是一个函数指针的数组。符号绑定的最终目的，是将 helloFramework() 真正在内存中的地址，写入到这个数组中。这样下次 helloFramework() 函数被调用，就不再走绑定流程，指令将直接进入到 helloFramework() 真正在内存中的地址中。</p>
+<p>那接下来有两个关键点：</p>
+<ol>
+<li>需要找到被写入的地址，也就是 __la_symbol_ptr 节中哪个位置是需要被覆盖的。</li>
+<li>需要找到 helloFramework() 真正在内存中的地址</li>
+</ol>
+<p>接下来的步骤，我们将结合 dyld 源码和符号断点调试来推演。</p>
+<p>dyld 是开源的，我们可以下载源码了解其中的部分逻辑：<a href="https://opensource.apple.com/tarballs/dyld/">源码</a></p>
+<p>如果我们想验证某个函数是否被执行了，Xcode 的符号断点可以利用起来。但这里有个小技巧：dyld 本身的函数由于执行太过频繁，lldb 默认不会将符号断点断在 dyld 的函数上。需要在 ~/.lldbinit 文件中加上</p>
+<pre><code>set set target.breakpoints-use-platform-avoid-list 0
+</code></pre>
+<p>这一行，才能用符号断点来调试 dyld。我们可以通过符号断点的断住时的调用栈信息，窥探符号绑定的过程中做了什么。</p>
+<h3 id="5-进入-dyld_stub_binder获取参数">5、进入 dyld_stub_binder，获取参数</h3>
+<p>进入 dyld_stub_binder 之前，有一些准备工作可以分析一下。</p>
+<p>dyld_stub_binder 函数是用汇编写的。从注释中可以推测，它接收两个参数：</p>
+<pre><code> /*    
+  * sp+0        lazy binding info offset
+  * sp+8        address of ImageLoader cache
+  */
+</code></pre>
+<p>而在 __TEXT, __stub_helper 节中，调用 dyld_stub_binder 之前，有一个压栈操作：<br>
+<img src="https://xushuangqing.github.io/post-images/cong--Exported-Symbols--ying-yong-yu-bao-da-xiao-you-hua-shuo-dao-fu-hao-bang-ding/164542-6bb0cfcaa2c3ec52.png" alt="" loading="lazy"></p>
+<pre><code>00000001000065f4        stp        x16, x17, [sp, #-0x10]!
+</code></pre>
+<p>x16 就是 dyld_stub_binder 的参数，代表 lazy binding info offset。</p>
+<p>x16 的值是怎么来的呢？我们再倒退一步，刚才在跳转到 __TEXT, __stub_helper 的第一行之前，有一个准备工作：</p>
+<figure data-type="image" tabindex="4"><img src="https://xushuangqing.github.io/post-images/cong--Exported-Symbols--ying-yong-yu-bao-da-xiao-you-hua-shuo-dao-fu-hao-bang-ding/164542-9e6d45d7ef7381e6.png" alt="" loading="lazy"></figure>
+<pre><code>0000000100006604        ldr        w16, 0x10000660c
+</code></pre>
+<p>Ldr 这行指令的意思是，将 0x10000660c 这个地址里的值，加载到 w16 寄存器中。w16 寄存器和 x16 寄存器其实是同一个，只是使用 w16 访问时，它是一个 32 位的数。</p>
+<p>那么  0x10000660c 这个地址里的值是什么？它位于 __TEXT, __stub_helper 节，值为 0x32。（其实就是下一行）<br>
+<img src="https://xushuangqing.github.io/post-images/cong--Exported-Symbols--ying-yong-yu-bao-da-xiao-you-hua-shuo-dao-fu-hao-bang-ding/164542-653b4b296caa4172.png" alt="" loading="lazy"></p>
+<p>这个 0x32 是一个重要的参数，接下来和绑定有关的信息将从这个 0x32 中衍生出来。</p>
+<h3 id="6-读取-lazy-binding-info">6、读取 lazy binding info</h3>
+<p>dyld_stub_binder 函数是汇编写的，它调用了 dyld::fastBindLazySymbol(ImageLoader** imageLoaderCache, uintptr_t lazyBindingInfoOffset) 函数。</p>
+<p>然后按照这个调用栈，<br>
+<img src="https://xushuangqing.github.io/post-images/cong--Exported-Symbols--ying-yong-yu-bao-da-xiao-you-hua-shuo-dao-fu-hao-bang-ding/164542-ce640b5a5b63fc5a.png" alt="" loading="lazy"></p>
+<p>调用到了</p>
+<pre><code>ImageLoaderMachOCompressed::doBindFastLazySymbol(uint32_t lazyBindingInfoOffset, const LinkContext&amp; context,
+                                                                                                                        void (*lock)(), void (*unlock)())
+</code></pre>
+<p>函数。</p>
+<p>doBindFastLazySymbol 函数将读取 MachO 文件的 lazy binding info 信息。</p>
+<figure data-type="image" tabindex="5"><img src="https://xushuangqing.github.io/post-images/cong--Exported-Symbols--ying-yong-yu-bao-da-xiao-you-hua-shuo-dao-fu-hao-bang-ding/164542-3cc53b52f8a8be7b.png" alt="" loading="lazy"></figure>
+<p>lazy binding info 信息在 MachO 靠近尾部的部分。</p>
+<p>这时，0x32 这个 lazyBindingInfoOffset 这个数就要派上用场。</p>
+<p>Lazy binding info 从 0x10000C2A0 开始。加上 0x32 这个 offset 后，dyld 将会去读取 0x10000C2D2 的内容。</p>
+<figure data-type="image" tabindex="6"><img src="https://xushuangqing.github.io/post-images/cong--Exported-Symbols--ying-yong-yu-bao-da-xiao-you-hua-shuo-dao-fu-hao-bang-ding/164542-dab5cc5bc6a2f7fb.png" alt="" loading="lazy"></figure>
+<p>MachOView 已经帮我们将这段数字翻译了一下。从中 dyld 可以读取到的信息有：<br>
+segment(2)、offset(24)、dylib(1)、flags(0)、name(_helloFramework)<br>
+最后的 BIND_OPCODE_DONE 代表的意思是，读到这一行后，dyld 将不再继续往下读。所以对于 helloFramework() 这次函数调用，这次绑定只会绑定 _helloFramework 一个符号。</p>
+<p>segment(2)、offset(24) 组合，可以得到“需要被替换的地址”。<br>
+dylib(1)，可以得到，dyld 应该从哪个动态库里去查找 _helloFramework 这个符号。<br>
+name(_helloFramework)，可以得到符号的名字。</p>
+<h3 id="7-找到-__data-__la_symbol_ptr-中需要被替换的地址">7、找到 __DATA, __la_symbol_ptr 中，“需要被替换的地址”</h3>
+<p>segment(2)、offset(24) 组合，可以得到“需要被替换的地址”。关键代码为</p>
+<pre><code>ImageLoaderMachOCompressed::doBindFastLazySymbol
+</code></pre>
+<p>中的</p>
+<pre><code>uintptr_t address = segActualLoadAddress(segIndex) + segOffset;
+</code></pre>
+<p>这一行</p>
+<p>从 segment(2) 这个信息中，dyld 会去寻找第 index=2 个 Load Command,也就是 LC_SEGMENT_64(__DATA），<br>
+<img src="https://xushuangqing.github.io/post-images/cong--Exported-Symbols--ying-yong-yu-bao-da-xiao-you-hua-shuo-dao-fu-hao-bang-ding/164542-057080ac2b4885af.png" alt="" loading="lazy"></p>
+<p>通过 VM Address 找到内存中的 __DATA 段的起始地址（4295000064 转换为 16 进制为 0x100008000）。</p>
+<p>0x100008000 再加上 offset=24，就是“需要被替换的地址”。即 0x100008000 + 0x18 = 0x100008018。这个地址位于 __la_symbol_ptr 节，正好回到了 helloFramework() 刚才走到过的 __la_symbol_ptr 节的位置。</p>
+<figure data-type="image" tabindex="7"><img src="https://xushuangqing.github.io/post-images/cong--Exported-Symbols--ying-yong-yu-bao-da-xiao-you-hua-shuo-dao-fu-hao-bang-ding/164542-8cd8429d8eb7f94b.png" alt="" loading="lazy"></figure>
+<h3 id="8-确定去哪个动态库找-_helloframework">8、确定去哪个动态库找 _helloFramework</h3>
+<p>从刚才从 lazy binding info 中读取到的 dylib(1)，可以得到，dyld 应该从哪个动态库里去查找 _helloFramework 这个符号。</p>
+<p>关键的代码是</p>
+<pre><code>ImageLoaderMachOCompressed::resolve
+</code></pre>
+<p>中的</p>
+<pre><code>*targetImage = libImage((unsigned int)libraryOrdinal-1);
+</code></pre>
+<p>ImageLoader::recursiveLoadLibraries 的时候，会按照 LC_LOAD_DYLIB 的顺序 setLibImage。现在 getLibImage 能得知每个动态库的加载地址。</p>
+<figure data-type="image" tabindex="8"><img src="https://xushuangqing.github.io/post-images/cong--Exported-Symbols--ying-yong-yu-bao-da-xiao-you-hua-shuo-dao-fu-hao-bang-ding/164542-1f6cf366c32237ff.png" alt="" loading="lazy"></figure>
+<h3 id="9-寻找-_helloframework-真正对应的地址">9、寻找 _helloFramework 真正对应的地址</h3>
+<p>现在我们需要搬出 XSQIOSFrameworkDemo 的 MachO 文件，这是一个动态库的 MachO 文件。<br>
+在最开头介绍 Exported Symbols 的时候，我们已经知道，Exported Symbols 的信息，是记录在动态库的 MachO 的 Export Info 中的。<br>
+<img src="https://xushuangqing.github.io/post-images/cong--Exported-Symbols--ying-yong-yu-bao-da-xiao-you-hua-shuo-dao-fu-hao-bang-ding/164542-ced0714bbc2c2262.png" alt="" loading="lazy"></p>
+<p>Export Info 的信息，使用了 trie 树（前缀树）这种数据结构做了编码。我们在 dyld 的源码中找到了和 trie 树解析相关的函数：trieWalk。给这个函数增加符号断点，我们得到了 dyld 通往 trie 树解析的调用栈。</p>
+<figure data-type="image" tabindex="9"><img src="https://xushuangqing.github.io/post-images/cong--Exported-Symbols--ying-yong-yu-bao-da-xiao-you-hua-shuo-dao-fu-hao-bang-ding/164542-e45e22fc1080575d.png" alt="" loading="lazy"></figure>
+<p>从 resolveTwolevel 这个函数开始，这个过程最终的目的，就是从 XSQIOSFrameworkDemo 的 Image 中，找到 _helloFramework 真正的地址。</p>
+<p>其中 Export Info 中可以提供的信息是：_helloFramework 符号对应的<br>
+Flags 00<br>
+Symbol Offset 0x7EB4</p>
+<p>0x7EB4 这个 Offset 从 MachO 角度，确实是 _helloFramework 符号对应的指令的起始。</p>
+<figure data-type="image" tabindex="10"><img src="https://xushuangqing.github.io/post-images/cong--Exported-Symbols--ying-yong-yu-bao-da-xiao-you-hua-shuo-dao-fu-hao-bang-ding/164542-716306455ce1d890.png" alt="" loading="lazy"></figure>
+<h3 id="10-将-_helloframework-真正的地址写入-__la_symbol_ptr-中">10、将 _helloFramework 真正的地址写入 __la_symbol_ptr 中</h3>
+<p>ImageLoaderMachO::bindLocation 函数将会通过 *locationToFix = newValue; 这一行，将 _helloFramework 的真正地址，写入 __la_symbol_ptr 对应的函数指针数组里。</p>
+<p>至此，绑定的过程完成。如果下次继续调用 _helloFramework，则走到 2 这一步就可以直接进入 _helloFramework 的指令中。</p>
+<h2 id="不导出符号有什么风险">不导出符号有什么风险？</h2>
+<p>如果我们修改了 XSQIOSFrameworkDemo 的 EXPORTED_SYMBOLS_FILE，让它不导出符号，那么 Export Info 将空。绑定时，dyld 会报错，表现为 crash，因为它找不到 _helloFramework 的符号。</p>
+<figure data-type="image" tabindex="11"><img src="https://xushuangqing.github.io/post-images/cong--Exported-Symbols--ying-yong-yu-bao-da-xiao-you-hua-shuo-dao-fu-hao-bang-ding/164542-d0155ee7dcaf6e9e.png" alt="" loading="lazy"></figure>
+<p>但是，一个动态库中，并不是所有符号都需要被其他动态库使用的。私有的符号完全不需要在 Export Info 中体现。但大家写代码时，一般也考虑不到这些，并不会对函数、全局变量等加上 <code>__private_extern__</code>。</p>
+<p><code>EXPORTED_SYMBOLS_FILE</code> 这个选项，可以在动态库打包，以白名单的形式指定需要暴露的符号。起到优化包大小、安全的作用。</p>
+<h2 id="说回可执行文件">说回可执行文件</h2>
+<p>试想，如果动态库想要反过来调用可执行文件的符号，会怎么样呢？<br>
+可以想像，绑定的流程会和刚才类似，可执行文件的 Export Info 也会被读取。</p>
+<p>之前我们给主工程使用 EXPORTED_SYMBOLS_FILE 优化了 2MB 包大小，优化前，主工程的 Export Info 包含了各种全局变量、OC 类的符号信息。在判断这个操作是否有风险时，通过对 Export Info 作用的分析，我们可以知道，这在我们的 app 中基本是没有风险的，除非有动态库想调用可执行文件的符号。</p>
+<p>“有动态库想调用可执行文件的符号”，其实也有这个场景，就是自动化测试。所以现在，内测版保留了 Export Info 中的信息，正式版是不导出的。</p>
+<h3 id="参考资料">参考资料</h3>
+<p><a href="https://opensource.apple.com/tarballs/dyld/">dyld 源码</a><br>
+<a href="https://stackoverflow.com/questions/60764951/setting-breakpoint-in-dynamic-loader-on-ios-simulator">Setting breakpoint in dynamic loader on iOS simulator</a></p>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/[UIImage-imageNamed-]--huan-cun-ce-lve-kui-tan/">
+              <h3 class="post-title">
+                下一篇：[UIImage imageNamed] 缓存策略窥探
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

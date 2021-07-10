@@ -1,0 +1,439 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>《SICP》读书笔记 | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">《SICP》读书笔记</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2021-07-07</span>
+            
+          </div>
+          <div class="post-content">
+            <p>因为图书角里恰好有这本书，我就借来看了。<br>
+《计算机程序的构造和解释》是 MIT 的教材，国内的高校也有相关的课程。英文名叫做《Structure and Interpretation of Computer Programs》，简称 SICP，搜索 SICP 可以获得很多资料。这本书以 Scheme 语言为例，讲解了“程序是如何解释执行的”这个问题。针对这个问题，它在每一章引入了一系列越来越精确的模型，这个模型可以理解为程序执行的规则。从“代换模型”，扩充为“环境模型”，然后用 Scheme 本身实现了一个 eval 函数，称为“元循环解释器”，最后用寄存器机器实现了一个 Scheme 解释器。同时，这本书也引入和讨论了很多话题，比如抽象的层次、函数式编程等等。很多人说这本书能塑造计算机程序的三观，确实有挺多点让我对“程序”有了新的思考。<br>
+<img src="https://xushuangqing.github.io/post-images/%E3%80%8ASICP%E3%80%8B-du-shu-bi-ji/164542-12ceb9b1e8832e2e.png" alt="" loading="lazy"><br>
+网上很多人称这本书为“时间黑洞”。emm 确实，我自己看书的程度只能算得上是走马观花，尤其是由于这本书的学习曲线是比较陡峭的（理论上它是设计给大一学生看的，emm），所以我对这五章内容的消化程度是指数级下降（emm）。所以此文只是讲一些我得到的收获。</p>
+<p>这本书是以 Scheme 语言举例的。此处，为了让大家不用去理解 Scheme 语言的语法，我会借用 Swift 语法。但是这仅仅只是借用了 Swift 语法，而不考虑 Swift 的真实实现，可以假设有人给 Swift 做了另外一种实现，甚至有人写了一个 Swift 解释器。所以下面的 Swift 我都用了引号。</p>
+<h3 id="一个简化的-swift">一个简化的 &quot;Swift&quot;</h3>
+<p>首先，我们假设这个 &quot;Swift&quot; 只支持这几种语法：</p>
+<ol>
+<li>表达式</li>
+</ol>
+<blockquote>
+<p>In <a href="https://en.wikipedia.org/wiki/Computer_science">computer science</a>, an <strong>expression</strong> is a <a href="https://en.wikipedia.org/wiki/Syntax_(programming_languages)">syntactic</a> entity in a <a href="https://en.wikipedia.org/wiki/Programming_language">programming language</a> that may be evaluated to determine its value.</p>
+</blockquote>
+<pre><code>486
+
+1 + 100
+
+</code></pre>
+<ol start="2">
+<li>常量 -- let</li>
+<li>过程定义 -- func / clousure</li>
+<li>条件表达式 -- if</li>
+</ol>
+<p>这个 &quot;Swift&quot; 没有变量（var），没有循环（for/while），但是它已经可以做比直观想象中更多的事情了。</p>
+<p>先从一个简单的例子开始：求 n 的阶乘：</p>
+<pre><code>func factorial(_ n:Int) -&gt; Int {
+  if n == 1 {
+    return 1
+  }
+  return n * factorial(n-1)
+}
+
+factorial(6);
+</code></pre>
+<h3 id="代换模型">代换模型</h3>
+<p>开头说过，这里举例的 &quot;Swift&quot; 代码，只是借用了 Swift 语法，可以认为是有人照着 Swift 语法实现了一个新的语言。所以当我们看着程序执行的时候，脑子里要抛弃掉内存、寄存器这样的概念。我们假设有一个机器，它能按照这样的规则执行 &quot;Swift&quot;：<br>
+To apply a compound procedure to arguments, evaluate the body of the procedure with each formal parameter replaced by the corresponding argument.<br>
+对于组合式，先求值其中的子表达式<br>
+找到要调用的过程的定义<br>
+将过程体中的每个形参用相应的实参取代之后，对过程体求值</p>
+<p>所以，factorial(6) 的计算过程会是</p>
+<pre><code>factorial(6)
+6*factorial(5)
+6*(5*factorial(4))
+6*(5*(4*factorial(3)))
+6*(5*(4*(3*factorial(2))))
+6*(5*(4*(3*(2*factorial(1)))))
+6*(5*(4*(3*(2*1))))
+6*(5*(4*(3*2)))
+6*(5*(4*6))
+6*(5*24)
+6*120
+720 
+</code></pre>
+<p>这种执行规则叫做“代换模型”。</p>
+<h3 id="递归-vs-迭代">递归 vs 迭代</h3>
+<p>我们很容易判断出，factorial 是一个递归过程。不管我们学习的是哪门语言，这个阶乘的实现都是讲“递归”时经典的例子。<br>
+但是当我们写完一个算法题后，面试官看到这个阶乘的实现，很可能会继续问：“有没有迭代的实现方案？”<br>
+如果我们用正常的 Swift 来回答这个问题，我们可以写</p>
+<pre><code>func factorial(_ n: Int) -&gt; Int {
+  var product = 1
+  var count = 1
+  while count &lt;= n {
+    product = count * product
+    count = count + 1
+  }
+  return product
+}
+
+factorial(6)
+</code></pre>
+<p>但是 &quot;Swift&quot; 是没有循环的，没有 for，没有 while。但是我们能从上面的实现中得到阶乘函数的重点：维持一个变动的乘积 product，以及一个 1~n 的计数器 counter，每一步都按照下面的规则变化：</p>
+<pre><code>product ← counter * product
+counter ← counter + 1 
+</code></pre>
+<p>因为 &quot;Swift&quot; 没有循环的，函数要达成循环的目的还是只能调用自己。所以在语法上，我们还是需要递归的形式（即自己调用自己），但是在计算过程中，我们可以仅用常数个状态变量来描述计算过程。所以我们这样重构了 factorial ：</p>
+<pre><code>func fact_iter(_ product: Int, _ counter: Int, _ n: Int) -&gt; Int {
+  if counter &gt; n {
+    return product
+  }
+  else {
+    return fact_iter((product * counter), (counter + 1), n)
+  }
+}
+
+func factorial(_ n: Int) -&gt; Int {
+  return fact_iter(1, 1, 6)
+}
+</code></pre>
+<p>我们依然用代换模型去执行这段代码，它的计算过程会是：<br>
+factorial(6)<br>
+fact-iter(1, 1, 6)<br>
+fact-iter(1, 2, 6)<br>
+fact-iter(2, 3, 6)<br>
+fact-iter(6, 4, 6)<br>
+fact-iter(24, 5, 6)<br>
+fact-iter(120, 6, 6)<br>
+fact-iter(720, 7, 6)<br>
+720</p>
+<p>这里我们会发现，这两个版本的阶乘，计算过程的“形状”是不一样的。<br>
+第一个版本中，总需要有存储空间去记忆“6*(5*(4*(3*(2*1))))”这样的信息，它的长度随着 n 线性增长。而在第二个版本中，虽然它在语法上仍然是递归的，但每一步需要的记忆的信息只有 product、counter 和 n。第二个版本的递归叫做尾递归。</p>
+<p>因为第二个版本中，需要记忆的信息只有常数个，所以当这个语言引入了“循环”语法后，只要语言的实现者愿意，他就可以让循环和尾递归互为语法糖。比如 C 中，尾递归可以被编译器优化为循环。</p>
+<h3 id="数据结构">数据结构</h3>
+<p>这个简化版的 &quot;Swift&quot; 能计算 n 的阶乘，好像挺好想象的。现在我们再进一步，用这个 &quot;Swift&quot; 来实现几个数据结构，比如 List。</p>
+<p>这里，我们要引入数据结构的一个基本单元：序对。<br>
+<img src="https://xushuangqing.github.io/post-images/%E3%80%8ASICP%E3%80%8B-du-shu-bi-ji/164542-8940bc6f7585d96c.png" alt="" loading="lazy"><br>
+序对会把两个元素组合在一起。<br>
+把多个序对组合，我们可以得到 List：<br>
+<img src="https://xushuangqing.github.io/post-images/%E3%80%8ASICP%E3%80%8B-du-shu-bi-ji/164542-5f140a3874c32c90.png" alt="" loading="lazy"><br>
+以此类推，我们也可以通过序对的组合，得到二叉树等数据结构。</p>
+<p>如果我们把序对当作数据结构的单位，它必要有三个函数：<br>
+con、car、cdr<br>
+con 负责把两个元素组合成一个序对。<br>
+car 负责取出序对的第一个元素。<br>
+cdr 负责取出序对的第二个元素。</p>
+<p>那么我们如何用 &quot;Swift&quot; 实现一个序对呢？一种方式是这样的：</p>
+<pre><code>func con(_ x: Any?, _ y: Any?) -&gt; (Int) -&gt; Any? {
+  func dispatch(m: Int) -&gt; Any? {
+    if m == 0 {
+      return x
+    }
+    else {
+      return y
+    }
+  }
+  return dispatch;
+}
+
+func car(_ z: (Int) -&gt; Any?) -&gt; Any? {
+  return z(0)
+}
+
+func cdr(_ z: (Int) -&gt; Any?) -&gt; Any? {
+  return z(1)
+}
+</code></pre>
+<p>我们把序对拼接称为 List，利用序对的这三个函数，我们可以构建 List，可以求 List 的长度，可以遍历一个 List，可以在遍历的同时作出操作。稍微复杂一点，使用这个基于代换模型的 &quot;Swift&quot; 和它构建的数据结构，我们可以写一些算法题了，比如书中有一道题是求解八皇后。</p>
+<h3 id="函数式编程-vs-命令式编程">函数式编程 vs 命令式编程</h3>
+<p>通过上面的几个程序，我们能明显感受到，这些程序的思维方式和我们以前学习的思维方式的不同。这源自于两种不同的“世界观”。</p>
+<p>看起来，这个简化版的&quot;Swift&quot;，虽然连 var 也没有，但已经能做很多操作了。那有什么操作是这个 &quot;Swift&quot; 不能做的呢？</p>
+<p>还是先从一个相对简单的例子看起：<br>
+现在我们想要做一个累加器：</p>
+<pre><code>func makeAccumulator(_ start: Int) {
+...
+}
+
+let accumulator = makeAccumulator(100)
+let q = accumulator(10) //110
+let p = accumulator(10) //120
+</code></pre>
+<p>&quot;Swift&quot; 可以实现么？答案是不可以。<br>
+在之前的几个样例程序中，如果我们用同样的参数对同一过程两次求值，会产生同样的结果。但是这个累加器不是的。它的执行隐含着“时间流逝”这个因素，第一次调用和第二次调用返回的结果是不一样的。</p>
+<p>如果我们确定了要通过计算机里的时间顺序去模拟实际系统里时间的流逝，那么我们必须构造起一些计算对象，使他们的行为随着程序的运行而改变。<br>
+如果我们希望模拟状态变量，那么语言里必须提供一个赋值运算符。</p>
+<p>如果我们给 &quot;Swift&quot; 引入 var，那么 makeAccumulator 就可以实现了。</p>
+<pre><code>func makeAccumulator(_ start: Int) -&gt; (Int) -&gt; Int {
+  var total = start
+  func accumulator(_ added: Int) -&gt; Int {
+    total += added
+    return total
+  }
+  return accumulator;
+}
+
+let accumulator = makeAccumulator(100)
+let q = accumulator(10) //110
+let p = accumulator(10) //120
+</code></pre>
+<p>只要我们不使用赋值，以同样的参数对同一过程的两次求值一定产生出同样的结果，因此就可以认为过程是在计算数学函数。不用任何赋值的程序设计称为“函数式程序设计”。<br>
+与之相对应的，广泛采用赋值的程序设计被称为“命令式程序设计”</p>
+<h3 id="环境模型">环境模型</h3>
+<p>但在引入赋值之后，变量在程序运行的某些时刻代表一个值，在另一些时刻代表另外一个值。代换模型就不再有效了。<br>
+这时，&quot;Swift&quot; 需要引入更复杂的“环境模型”。</p>
+<p>环境是什么呢？环境是一系列 frame，每一个 frame 是一个映射表。这个映射表把名字和值映射起来。每个 frame 还包含一个指针，指向外围环境。如果某个 frame 是全局的，它就没有外围环境。一个变量相对于某个环境的值，是这个环境中，包含该变量的第一个 frame 里这个变量的约束值。<br>
+<img src="https://xushuangqing.github.io/post-images/%E3%80%8ASICP%E3%80%8B-du-shu-bi-ji/164542-0a1650a7b32da1b0.png" alt="" loading="lazy"><br>
+比如这张图里，假设 x 是一个变量，在环境 B 里，x 的值是 3，在环境 A 里，x 的值是 7。</p>
+<p>在环境模型里，一个过程是一个序对（Pair），由一些代码和一个指向环境的指针组成。过程只能通过 lambda 表达式创建。其中代码部分包含参数和过程体。</p>
+<p>我们给 makeAccumulator 这段代码套上环境模型。</p>
+<p>首先执行</p>
+<pre><code>func makeAccumulator(_ start: Int) -&gt; (Int) -&gt; Int {
+  var total = start
+  func accumulator(_ added: Int) -&gt; Int {
+    total += added
+    return total
+  }
+  return accumulator;
+}
+</code></pre>
+<p>（为了方便解释，这里先作弊一下，把 total 干掉，认为 start 是一个 var）</p>
+<pre><code>let makeAccumulator = {(_ start: Int) -&gt; (Int) -&gt; Int in
+  return { (_ added: Int) -&gt; Int in
+    start += added
+    return start
+  }
+}
+</code></pre>
+<figure data-type="image" tabindex="1"><img src="https://xushuangqing.github.io/post-images/%E3%80%8ASICP%E3%80%8B-du-shu-bi-ji/164542-647b6b98dc2d6bcf.png" alt="" loading="lazy"></figure>
+<p>我们按照过程的定义在环境模型中构造它。<br>
+由于这个过程是在全局环境中被定义的，所以它的环境指针指向全局。同时，全局环境中 makeAccumulator 这个名字成为了这一过程的变量名，于是我们把 makeAccumulator 这个名字约束到这一过程上。</p>
+<p>然后执行</p>
+<pre><code>let accumulator = makeAccumulator(100)
+</code></pre>
+<p>这是一个过程调用。执行过程调用时有一个规则：<br>
+在将一个过程应用于一组实际参数时，会建立起一个新环境，其中包含了将所有形式参数约束于对应的实际参数的框架，该框架的外围环境就是所用的那个过程的环境，随后就在这个新环境下求值过程体。<br>
+这里我们首先建立了一个新环境，将形式参数 start 约束到实际参数 100。由于这个调用是在全局环境中发生的，所以新环境的外围环境是全局环境。</p>
+<figure data-type="image" tabindex="2"><img src="https://xushuangqing.github.io/post-images/%E3%80%8ASICP%E3%80%8B-du-shu-bi-ji/164542-c07a0a4a56d15c73.png" alt="" loading="lazy"></figure>
+<p>从新环境中，我们能获取到 makeAccumulator 对应的过程体：</p>
+<pre><code>{(_ start: Int) -&gt; (Int) -&gt; Int in
+  return { (_ added: Int) -&gt; Int in
+    start += added
+    return start
+  }
+}
+</code></pre>
+<p>把 start 代入后，求值的到</p>
+<pre><code>{ (_ added: Int) -&gt; Int in
+    start += added
+    return start
+}
+</code></pre>
+<p>同时，全局环境中会增加 accumulate 到这一过程体的约束。</p>
+<figure data-type="image" tabindex="3"><img src="https://xushuangqing.github.io/post-images/%E3%80%8ASICP%E3%80%8B-du-shu-bi-ji/164542-c2d565ddca218e00.png" alt="" loading="lazy"></figure>
+<p>接下来再执行<br>
+let q = accumulator(10) //110</p>
+<figure data-type="image" tabindex="4"><img src="https://xushuangqing.github.io/post-images/%E3%80%8ASICP%E3%80%8B-du-shu-bi-ji/164542-51292594edf647d7.png" alt="" loading="lazy"></figure>
+<p>这时，环境中的 start 从 100 变成了 110<br>
+当下一行代码再次需要使用到 start 时，它取到的值就是 110。</p>
+<p>有了环境模型以后，&quot;Swift&quot; 可以支持 var 的赋值运算。</p>
+<h3 id="eval-apply">Eval &amp; apply</h3>
+<p>回想刚刚，我们用环境模型执行了 accumulator 这个程序。我们会发现，在执行这个程序的过程中，我们用到了两个基本操作：</p>
+<p>1、求值一个组合式时，先求值子表达式，然后将子表达式的结果代入，求出组合式的值（和代换模型一样）</p>
+<p>2、当将参数应用到过程时，需要在一个新环境中求值这个过程体。为了构造这个新环境，我们需要用一个新的 frame 扩展当前的环境，在这个 frame 中，形式参数被约束到了实际参数（环境模型）</p>
+<p>在将一个过程应用于一组实际参数时，会建立起一个新环境，其中包含了将所有形式参数约束于对应的实际参数的框架，该框架的外围环境就是所用的那个过程的环境，随后就在这个新环境下求值过程体。</p>
+<p>这两个基本操作组成了一个循环，可以描述为 eval 和 apply 的循环。</p>
+<figure data-type="image" tabindex="5"><img src="https://xushuangqing.github.io/post-images/%E3%80%8ASICP%E3%80%8B-du-shu-bi-ji/164542-541309f5e7ea97cf" alt="" loading="lazy"></figure>
+<p>Eval 的参数是一个表达式和一个环境，它返回这个表达式在环境中的求值结果。</p>
+<p>Apply 的参数是一个过程和一个实际参数的表，他将实际参数应用于过程，相当于将过程转换成了表达式，返回出去，接着交给 Eval 处理。</p>
+<p>这里我用伪代码来示意一下这个过程：</p>
+<pre><code>func eval(exp, env) {
+    if (is-self-evaluating(exp)) return exp
+    elseif (is-variable(exp)) return lookup-variable-value(exp, env)
+    elseif (is-definition(exp)) return eval-definition(exp, env)
+    ...
+    elseif (is-application(exp)) 
+        return apply(eval(operator(exp), env)), list-of-values(operator(exp), env))
+    else error...
+}
+
+</code></pre>
+<p>刚才我们讲到了函数，这是对过程的抽象；讲到了序对，这是对数据的抽象。现在世界上有了另一种抽象，是对语言的抽象。</p>
+<p>这本书一步一步实现了一个 Scheme 的元循环解释器。最后大概 300 多行代码，可以调试着玩玩。因为 Scheme 代码本身就是 Scheme 语言的一个“内置对象”，即列表，所以用 Scheme，可以轻易取出函数名，函数体，形参列表等等，简化了 eval 的实现。</p>
+<h3 id="一个寄存器机器实现的解释器">一个寄存器机器实现的解释器</h3>
+<p>刚才讲到的“代换模型”和“环境模型”都是理论上定义了一个规则。机器是怎么理解这个规则的呢？</p>
+<p>还是用阶乘来举例</p>
+<pre><code>func factorial(_ n: Int) -&gt; Int {
+  func fact_iter(_ product: Int, _ counter: Int) -&gt; Int {
+   if counter &gt; n {
+    return product
+   }
+   else {
+    return fact_iter((product * counter), (counter + 1))
+   }
+  }
+  return fact_iter(1, 1)
+}
+
+factorial(6)
+</code></pre>
+<p>现在我们要来制造一个能计算阶乘的物理机器。<br>
+这个机器由两部分组成：<br>
+<img src="https://xushuangqing.github.io/post-images/%E3%80%8ASICP%E3%80%8B-du-shu-bi-ji/164542-7f4b295830778d9f.png" alt="" loading="lazy"></p>
+<p>第一部分：</p>
+<ul>
+<li>每个方框表示一个寄存器</li>
+<li>梯形表示一个计算器</li>
+<li>带叉叉的圆圈表示一个开关，平时是断开的，如果有人按了一下，数据就像电流一样流了过去</li>
+<li>圆圈表示一个检测，counter &gt; n 的时候会变成红色<br>
+第二部分：<br>
+我们告诉一个小朋友：如果检测圆圈没有变成红色，就按一下开关1，再按一下开关2。<br>
+等开关变红色了，就从 product 的盒子里取出答案。</li>
+</ul>
+<p>这两个图可以描述简单的程序，但是描述大型机器就会很不方便。但其实上图描述中，我们只是用到了几个指令。我们可以创造一个语言，一条指令可以是其中几种东西之一：</p>
+<ul>
+<li>按一个开关，使得一个值被赋值给寄存器：assign</li>
+<li>执行一个检测，亮一盏灯：test</li>
+<li>根据灯的颜色，跳转到某条指令：branch</li>
+<li>跳转到某条指令：goto<br>
+这个机器便可以用指令来描述。</li>
+</ul>
+<h3 id="机器的抽象">机器的抽象</h3>
+<p>上图中的 multi 元件，我们认为是现成的。但是如果世界上没有 multi 元件，而是需要用 add 元件构造，那可想而知，表示这个机器的图会更加复杂。<br>
+这时我们可以想象，如果我们把 multi 单独做成一个机器，放在一边。每次需要使用 multi 的时候，把输入先存放到固定的寄存器中，执行 multi，然后把结果也存入固定的寄存器，再拷贝到需要它的地方，我们就可以实现 multi 机器的抽象。<br>
+这时，指令集需要得到扩充。由于我们需要记录“结果需要被拷贝到哪”，我们需要扩充 assign 语句，使它能存放一个 label，也需要扩充 goto 语句，使它能从一个寄存器中读取 label，并跳转过去。</p>
+<h3 id="栈">栈</h3>
+<p>在第一个递归版本的阶乘函数中，我们已知，执行这个阶乘函数，需要记忆的信息与 n 成正比。<br>
+由于寄存器只有常数个，为了执行递归的阶乘，我们需要引入新的数据存取的方式：栈。<br>
+于是指令集再次得到扩充：save 表示将一个值入栈，restore 表示从栈中恢复一个值。</p>
+<pre><code>func factorial(_ n:Int) -&gt; Int {
+  if n == 1 {
+    return 1
+  }
+  return n * factorial(n-1)
+}
+
+factorial(6);
+</code></pre>
+<p>【待续】</p>
+<h3 id="参考资料">参考资料：</h3>
+<p>SICP.pdf https://opendocs.github.io/sicp/sicp.pdf<br>
+SICP solutions http://community.schemewiki.org/?SICP-Solutions<br>
+如何准备 Scheme 环境 https://stackoverflow.com/questions/12322434/how-to-install-mit-scheme-on-mac/31601331#31601331<br>
+https://lfkdsk.github.io/</p>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/wei-shen-me--iOS-14-5--xia--fishhook--hui--crash/">
+              <h3 class="post-title">
+                下一篇：为什么 iOS 14.5 下 fishhook 会 crash
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

@@ -1,0 +1,292 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>weak是怎么实现的 | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">weak是怎么实现的</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2016-07-26</span>
+            
+          </div>
+          <div class="post-content">
+            <p>在Objective-C中，用<code>__weak</code>修饰的指针，会在所指向的那个Objective-C对象被释放后，自动指向<code>nil</code>。</p>
+<p>使用<code>__weak</code>来修饰指针，相比于<code>__unsafe_unretained</code>，可以帮助程序员减小访问野指针的风险，方便了程序员对内存的管理。</p>
+<p>但是，<code>__weak</code>是如何做到当指向的Objective-C对象被释放后，自动指向<code>nil</code>的呢？</p>
+<p>一个通俗的解释就是，在Objective-C的运行时环境中，维护了一种weak表，这张哈希表用对象的首地址作为键，将由若干个<code>__weak</code>修饰的指针自身的地址组成的数组作为值。当一个Objective-C对象被释放后，通过这个对象的起始地址来找到所有指向它的<code>__weak</code>指针，并将它们指向<code>nil</code>。</p>
+<p>本文中关于runtime的源码参考自苹果开源的<a href="http://opensource.apple.com/tarballs/objc4/objc4-680.tar.gz">objc4-680</a>，编译环境为Xcode7.3，clang-703.0.29。</p>
+<hr>
+<h3 id="创建一个__weak指针">创建一个__weak指针</h3>
+<br>
+写一段简单的代码：
+<pre><code>NSObject *strongObj = [[NSObject alloc] init];
+__weak NSObject *weakObj = strongObj;
+</code></pre>
+<p>在编译后，可以看到<code>objc_initWeak</code>和<code>objc_destroyWeak</code>两个函数被调用了。</p>
+<p>在开源的runtime源码中找到这两个方法，就可以依次找到weak表的结构。<code>objc_initWeak</code>和<code>objc_destroyWeak</code>两个方法，都调用了<code>storeWeak</code>方法。</p>
+<p>这个<code>storeWeak</code>方法接收两个参数：</p>
+<pre><code>template &lt;bool HaveOld, bool HaveNew, bool CrashIfDeallocating&gt;
+static id 
+storeWeak(id *location, objc_object *newObj)
+</code></pre>
+<p>其中，<code>location</code>中存放的是<code>__weak</code>指针的地址，<code>newObj</code>中存放的，是<code>__weak</code>指针即将指向的对象的地址。这个方法会根据传入的参数来更新维护这个weak表。</p>
+<hr>
+<h3 id="weak表的结构">weak表的结构</h3>
+<br>
+提取一部分结构体来帮助理解：
+<p>全局有若干（根据平台可能是8或者64）个<code>SideTable</code>对象，一个对象的地址经过哈希后，可以确定这个对象具体映射到那个<code>SideTable</code>。</p>
+<p>一个<code>SideTable</code>结构体中包含了一个<code>weak_table</code>：</p>
+<pre><code>struct SideTable {
+    //.......
+    weak_table_t weak_table;
+    //.......
+};
+</code></pre>
+<p>这个<code>weak_table</code>中的<code>weak_entries</code>指针，指向一个<code>weak_entry_t</code>类型的数组：</p>
+<pre><code>/**
+ * The global weak references table. Stores object ids as keys,
+ * and weak_entry_t structs as their values.
+ */
+struct weak_table_t {
+    weak_entry_t *weak_entries;
+    size_t    num_entries;
+    uintptr_t mask;
+    uintptr_t max_hash_displacement;
+};
+</code></pre>
+<p>根据对象首地址查找weak_entry的方法为<code>weak_entry_for_referent()</code>，可以看到其中对对象首地址做了一次哈希，得到了对应的index。如果发生碰撞，则index依次+1，遍历整个数组，检查是否能获得正确的<code>weak_entry_t</code>对象。</p>
+<p>这个<code>weak_entry_t</code>中维护了所有指向某个地址的<code>__weak</code>指针：</p>
+<pre><code>/**
+ * The internal structure stored in the weak references table. 
+ * It maintains and stores
+ * a hash set of weak references pointing to an object.
+ * If out_of_line==0, the set is instead a small inline array.
+ */
+#define WEAK_INLINE_COUNT 4
+struct weak_entry_t {
+    DisguisedPtr&lt;objc_object&gt; referent;
+    union {
+        struct {
+            weak_referrer_t *referrers;
+            uintptr_t        out_of_line : 1;
+            uintptr_t        num_refs : PTR_MINUS_1;
+            uintptr_t        mask;
+            uintptr_t        max_hash_displacement;
+        };
+        struct {
+            // out_of_line=0 is LSB of one of these (don't care which)
+            weak_referrer_t  inline_referrers[WEAK_INLINE_COUNT];
+        };
+    };
+};
+</code></pre>
+<p>其中的<code>weak_referrer_t</code>实际就是指向Objective-C对象的指针的地址的类型：</p>
+<pre><code>/// The address of a __weak object reference
+typedef objc_object ** weak_referrer_t;
+</code></pre>
+<hr>
+<h3 id="weak_clear_no_lock">weak_clear_no_lock</h3>
+<br>
+在runtime的代码中，可以找到一个叫做```weak_clear_no_lock```的方法，它的注释表明，这个方法会被dealloc方法调用，然后将被销毁对象所对应的所有弱引用指针都置为nil。
+<pre><code>/** 
+ * Called by dealloc; nils out all weak pointers that point to the 
+ * provided object so that they can no longer be used.
+ * 
+ * @param weak_table 
+ * @param referent The object being deallocated. 
+ */
+void 
+weak_clear_no_lock(weak_table_t *weak_table, id referent_id) 
+{
+    objc_object *referent = (objc_object *)referent_id;
+
+    weak_entry_t *entry = weak_entry_for_referent(weak_table, referent);
+    if (entry == nil) {
+        /// XXX shouldn't happen, but does with mismatched CF/objc
+        //printf(&quot;XXX no entry for clear deallocating %p\n&quot;, referent);
+        return;
+    }
+
+    // zero out references
+    weak_referrer_t *referrers;
+    size_t count;
+    
+    if (entry-&gt;out_of_line) {
+        referrers = entry-&gt;referrers;
+        count = TABLE_SIZE(entry);
+    } 
+    else {
+        referrers = entry-&gt;inline_referrers;
+        count = WEAK_INLINE_COUNT;
+    }
+    
+    for (size_t i = 0; i &lt; count; ++i) {
+        objc_object **referrer = referrers[i];
+        if (referrer) {
+            if (*referrer == referent) {
+                *referrer = nil;
+            }
+            else if (*referrer) {
+                _objc_inform(&quot;__weak variable at %p holds %p instead of %p. &quot;
+                             &quot;This is probably incorrect use of &quot;
+                             &quot;objc_storeWeak() and objc_loadWeak(). &quot;
+                             &quot;Break on objc_weak_error to debug.\n&quot;, 
+                             referrer, (void*)*referrer, (void*)referent);
+                objc_weak_error();
+            }
+        }
+    }
+    
+    weak_entry_remove(weak_table, entry);
+}
+</code></pre>
+<p>这段代码中做的事情比较清晰，大概流程是：</p>
+<ol>
+<li>利用即将被销毁的对象的首地址，找到对应的<code>weak_entry_t</code>。</li>
+<li>从<code>weak_entry_t</code>对象中获取指向<code>weak_referrer_t</code>数组的指针。</li>
+<li>遍历这个数组，对于数组中的每个元素，检查是否真的指向即将被销毁的对象的首地址，如果是，则将它指向nil，如果不是则报错。</li>
+<li>释放这个<code>weak_entry_t</code>对象，并更新<code>weak_table_t</code>中的entry数目。如果有必要，对<code>weak_table_t</code>进行缩容。</li>
+</ol>
+<hr>
+<h3 id="其他">其他</h3>
+<br>
+使用```__weak```修饰的指针，还有一些神奇的行为。
+<p>当使用一个<code>__weak</code>指针时，<code>objc_loadWeakRetained()</code>和<code>objc_release()</code>函数都被调用了。</p>
+<p>其中<code>objc_loadWeakRetained()</code>会调用<code>retainWeakReference</code>方法，如果某个类重写了<code>retainWeakReference</code>方法并返回<code>NO</code>，则这个<code>__weak</code>指针获取的就永远是<code>nil</code>了。</p>
+<p>而<code>retainWeakReference</code>方法默认的实现，是会尝试增加该对象的引用计数。</p>
+<p>为什么需要在使用一个<code>__weak</code>指针时调用<code>objc_loadWeakRetained()</code>函数呢？注释中是这样说的：</p>
+<pre><code>/** 
+ * This function gets called when the value of a weak pointer is being 
+ * used in an expression. Called by objc_loadWeakRetained() which is
+ * ultimately called by objc_loadWeak(). The objective is to assert that
+ * there is in fact a weak pointer(s) entry for this particular object being
+ * stored in the weak-table, and to retain that object so it is not deallocated
+ * during the weak pointer's usage.
+ * 
+ * @param weak_table 
+ * @param referrer The weak pointer address. 
+ */
+id 
+weak_read_no_lock(weak_table_t *weak_table, id *referrer_id) 
+</code></pre>
+<p>是为了确保在使用这个<code>__weak</code>指针的过程中，指向的对象不被释放。</p>
+<hr>
+<h4 id="参考">参考</h4>
+<p><a href="http://nsoio.github.io/2015/06/28/ARC%E4%B8%ADweak%E5%AE%9E%E7%8E%B0/">ARC中weak实现</a><br>
+<a href="http://opensource.apple.com/tarballs/objc4/objc4-680.tar.gz">objc4-680</a><br>
+<a href="https://book.douban.com/subject/24720270/">《Objective-C 高级编程》</a></p>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/Objective-C-de-na-xie-te-xing-li-yong-le-yun-xing-shi-ji-zhi/">
+              <h3 class="post-title">
+                下一篇：Objective C的哪些特性利用了运行时机制
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

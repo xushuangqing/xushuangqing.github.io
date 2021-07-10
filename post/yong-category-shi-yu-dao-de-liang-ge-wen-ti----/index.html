@@ -1,0 +1,309 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>用category时遇到的两个问题 | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">用category时遇到的两个问题</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2015-09-17</span>
+            
+          </div>
+          <div class="post-content">
+            <p>category似乎是OC提供的一种比较独特的功能，第三方程序员可以使用OC中的category为已有的类添加新的方法，不管这个类的源代码是不是可见的。这种扩展类的方式不需要创建子类，因此可以应用在很多场景下。</p>
+<p>但是在实际使用category的时候，也有一些需要注意的地方。所以这里记一下因为我的疏忽而被坑过的地方&gt;.&lt;</p>
+<p>写这篇的时候，森森感觉自己知道的东西太少了(´･_･`)对编译、链接还有运行时的动作都好模糊-.-虽然觉得可能漏洞百出，但还是先发上来吧，待我搞明白了更多事情，再来修改TAT</p>
+<hr>
+<p>###问题1：方法名冲突</p>
+<br>
+[官方文档](https://developer.apple.com/library/ios/documentation/Cocoa/Conceptual/ProgrammingWithObjectiveC/CustomizingExistingClasses/CustomizingExistingClasses.html#//apple_ref/doc/uid/TP40011210-CH6-SW2)中这样描述了category可能引起的方法名冲突：
+>If the name of a method declared in a category is the same as a method in the original class, or a method in another category on the same class (or even a superclass), the behavior is undefined as to which method implementation is used at runtime.
+如果定义在category中的方法与原始类中的某个方法重名，或者与这个类（及其父类）的另一个category中的方法重名，那么在运行时，哪一个方法实现会被执行，则是不一定的。
+<p>因此，苹果建议为category中的方法名加上前缀，就像这样：</p>
+<pre><code>@interface NSSortDescriptor (XYZAdditions)
++ (id)xyz_sortDescriptorWithKey:(NSString *)key ascending:(BOOL)ascending;
+@end
+</code></pre>
+<p>然而，在实际编程中，很多人都会忘了这一点(´･_･`)也包括我。</p>
+<p>在使用category中的方法的时候，想当然的以为，当我import了这个category时，我发送的消息就会发送到import的category上。（因为用XCode点击方法名跳转到了我期望的那个方法的定义上-.-，莫名其妙的误导了我）</p>
+<p>实际上，这和import了哪个头文件没什么关系。我的理解是，import的信息只在编译期间起作用。在运行时，运行时系统会将category中的方法加入到对应类的method_list中，变成和这个类的原有方法完全平等的方法。<a href="http://chun.tips/blog/2014/11/06/bao-gen-wen-di-objective%5Bnil%5Dc-runtime(3)%5Bnil%5D-xiao-xi-he-category/">这篇文章</a>解释了category的原理。</p>
+<p><a href="https://developer.apple.com/library/ios/documentation/General/Conceptual/DevPedia-CocoaCore/Category.html">官方文档</a>也表示：</p>
+<blockquote>
+<p>The added methods are inherited by subclasses and are indistinguishable at runtime from the original methods of the class. <br>
+被加入的方法可以被子类继承，并且在运行时，无法区分category中的方法和这个类原有的方法。</p>
+</blockquote>
+<hr>
+<p>###问题2：静态库链接</p>
+<br>
+这篇[Q&A](https://developer.apple.com/library/mac/qa/qa1490/_index.html)解释了在静态库中使用category的一个可能产生的问题：如果使用静态库中定义的category发送，则有可能在运行时报出selector not recognized错误。
+<p>为了了解发生这个问题的原因，首先要解释一下静态库的概念。《深入理解计算机系统》中这样描述静态库：</p>
+<blockquote>
+<p>相关的函数可以被编译为独立的目标模块，然后封装成一个单独的静态库文件。然后，应用程序可以通过在命令行上指定单独的文件名字来使用这些在库中定义的函数。<br>
+在链接时，链接器将只拷贝被程序引用的目标模块，这就减少了可执行文件在磁盘和存储器中的大小。另一方面，应用程序员只需要包含较少的库文件的名字。</p>
+</blockquote>
+<p>所以这个问题的产生，很可能是因为链接器在链接静态库时，没有链接到这个category所在的目标模块。</p>
+<p>文档中的解释是，Objective-C不会为方法定义linker symbol，只会为类定义linker symbol。</p>
+<p>比如我写了这样一个程序：</p>
+<pre><code>#import &lt;Foundation/Foundation.h&gt;
+
+@interface XSQArray : NSArray
+
+- (void)xsq_hello;
+
+@end
+
+int main(int argc, char * argv[]) {
+    @autoreleasepool {
+        
+        XSQArray *xsq_array = [XSQArray new];
+        [xsq_array xsq_hello];
+        
+        return 0;
+    }
+}
+</code></pre>
+<p>在build这个程序的时候，编译可以顺利执行，但链接时会报错：</p>
+<pre><code>Undefined symbols for architecture x86_64:
+  &quot;_OBJC_CLASS_$_XSQArray&quot;, referenced from:
+      objc-class-ref in main.o
+ld: symbol(s) not found for architecture x86_64
+clang: error: linker command failed with exit code 1 (use -v to see invocation)
+</code></pre>
+<p>猜测<code>_OBJC_CLASS_$_XSQArray</code>就是OC为<code>XSQArray</code>生成的linker symbol，而由于这个类没有实现，所以链接器找不到linker symbol的定义，所以链接失败。</p>
+<p>而这样的程序是可以通过链接的：</p>
+<pre><code>#import &lt;Foundation/Foundation.h&gt;
+
+@interface XSQArray : NSArray
+
+- (void)xsq_hello;
+
+@end
+
+@implementation XSQArray
+
+@end
+
+int main(int argc, char * argv[]) {
+    @autoreleasepool {
+        
+        XSQArray *xsq_array = [XSQArray new];
+        [xsq_array xsq_hello];
+        
+        return 0;
+    }
+}
+</code></pre>
+<p>即便<code>xsq_hello</code>方法没有它对应的实现。</p>
+<p>（猜测）这就说明了Objective-C不会为方法定义linker symbol。</p>
+<p>所以在链接静态库的时候，使用category中的方法是不会生成linker symbol的，也就是说链接器可能不知道应该链接这个category对应的.o文件。</p>
+<p>加上<code>-ObjC</code>选项会让链接器载入静态库中所有实现了Objective C中的类或者category的成员。它可以解决这个问题，同时也可能会导致最终获得的可执行文件变大。所以这一选项不是默认的链接选项。</p>
+<hr>
+<p>####参考：<br>
+<a href="https://developer.apple.com/library/ios/documentation/General/Conceptual/DevPedia-CocoaCore/Category.html">Category</a><br>
+<a href="https://developer.apple.com/library/ios/documentation/Cocoa/Conceptual/ProgrammingWithObjectiveC/CustomizingExistingClasses/CustomizingExistingClasses.html#//apple_ref/doc/uid/TP40011210-CH6-SW2">Customizing Existing Classes</a><br>
+<a href="https://developer.apple.com/library/mac/qa/qa1490/_index.html">Building Objective-C static libraries with categories</a><br>
+<a href="http://chun.tips/blog/2014/11/06/bao-gen-wen-di-objective%5Bnil%5Dc-runtime(3)%5Bnil%5D-xiao-xi-he-category/">刨根问底Objective－C Runtime（3）－ 消息 和 Category</a><br>
+<a href="http://item.jd.com/10360906.html">《深入理解计算机系统》</a></p>
+<hr>
+<p>###2015年9月19日更新</p>
+<br>
+关于linker symbol的问题，后来我请教了我的老板。老板教我做了这样的实验：
+<p>首先，写了一些实验代码，分为两个文件：</p>
+<pre><code>//main.m
+
+#import &lt;Foundation/Foundation.h&gt;
+
+@interface NSObject (MyCategory)
+
+- (void)sayHelloWorld;
+
+@end
+
+int main(int argc, char * argv[]) {
+    @autoreleasepool {
+        [[NSObject new] sayHelloWorld];
+        return 0;
+    }
+}
+</code></pre>
+<pre><code>//MyCategory.m
+
+#import &lt;Foundation/Foundation.h&gt;
+
+@implementation NSObject (MyCategory)
+
+- (void)sayHelloWorld {
+    NSLog(@&quot;Hello World!&quot;);
+}
+
+@end
+</code></pre>
+<p>用<code>clang</code>命令分别编译它们，输出.o文件。</p>
+<p>然后用<code>nm</code>命令查看.o文件的linker symbol，比如查看main.o文件的linker symbol：</p>
+<pre><code>nm main.o
+</code></pre>
+<p>得到：</p>
+<pre><code>0000000000000000 t -[NSObject(MyCategory) sayHelloWorld]
+0000000000000027 s L_.str
+0000000000000060 s L_OBJC_CLASS_NAME_
+000000000000006b s L_OBJC_METH_VAR_NAME_
+0000000000000079 s L_OBJC_METH_VAR_TYPE_
+                 U _NSLog
+                 U _OBJC_CLASS_$_NSObject
+                 U ___CFConstantStringClassReference
+0000000000000088 s l_OBJC_$_CATEGORY_INSTANCE_METHODS_NSObject_$_MyCategory
+00000000000000a8 s l_OBJC_$_CATEGORY_NSObject_$_MyCategory
+</code></pre>
+<p>这里，<code>U</code>代表的是没有定义的符号，其中没有和<code>sayHelloWorld</code>这个方法相关的。</p>
+<p>用<code>ar</code>命令可以创建静态库，将MyCategory.o打包进libCategory.a这个静态库中：</p>
+<pre><code>ar rcs libCategory.a MyCategory.o
+</code></pre>
+<p>此时出现了warning：</p>
+<pre><code>warning: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ranlib: warning for library: libCategory.a the table of contents is empty (no object file members in the library define global symbols)
+</code></pre>
+<p>表示libCategory.a中的符号表是空的（因为定义类中的方法不会产生linker symbol）。</p>
+<p>链接main.o和libCategory.a，以及Foundation这个framework（加上<code>-whyload</code>可以打印出静态库中每个.o文件被链接的原因）：</p>
+<pre><code>clang main.o libCategory.a -framework Foundation -whyload
+</code></pre>
+<p>会输出一个a.out的可执行文件。</p>
+<p>运行a.out，会报出预料中的运行时错误：</p>
+<pre><code>2015-09-19 21:57:51.097 a.out[63232:2132374] -[NSObject sayHelloWorld]: unrecognized selector sent to instance 0x7fca5a5138f0
+2015-09-19 21:57:51.100 a.out[63232:2132374] *** Terminating app due to uncaught exception 'NSInvalidArgumentException', reason: '-[NSObject sayHelloWorld]: unrecognized selector sent to instance 0x7fca5a5138f0'
+*** First throw call stack:
+(
+ 0   CoreFoundation                      0x00007fff97eab03c __exceptionPreprocess + 172
+ 1   libobjc.A.dylib                     0x00007fff9015276e objc_exception_throw + 43
+ 2   CoreFoundation                      0x00007fff97eae0ad -[NSObject(NSObject) doesNotRecognizeSelector:] + 205
+ 3   CoreFoundation                      0x00007fff97df3e24 ___forwarding___ + 1028
+ 4   CoreFoundation                      0x00007fff97df3998 _CF_forwarding_prep_0 + 120
+ 5   a.out                               0x0000000109999f27 main + 71
+ 6   libdyld.dylib                       0x00007fff8a04e5c9 start + 1
+)
+libc++abi.dylib: terminating with uncaught exception of type NSException
+Abort trap: 6
+</code></pre>
+<p>而使用了<code>-ObjC</code>的linker flag之后：</p>
+<pre><code>clang main.o libCategory.a -framework Foundation -whyload -ObjC
+</code></pre>
+<p>输出了：</p>
+<pre><code>-ObjC forced load of libCategory.a(MyCategory.o)
+</code></pre>
+<p>意思是，由于<code>-ObjC</code>这个linker flag，MyCategory.o被强制链接了进来。</p>
+<p>此时运行新生成的a.out，可以成功输出“Hello World”。</p>
+<p>####参考：<br>
+<a href="http://stackoverflow.com/questions/2567498/objective-c-categories-in-static-library">Objective-C categories in static library</a></p>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/bei-wu-shu-ren-xie-guo-de-assign，retain，strong，weak，unsafe_unretained，-huan-you-copy/">
+              <h3 class="post-title">
+                下一篇：被无数人写过的assign，retain，strong，weak，unsafe_unretained，还有copy
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

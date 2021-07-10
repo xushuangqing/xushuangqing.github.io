@@ -1,0 +1,282 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>自定义一个对话框 | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">自定义一个对话框</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2015-05-13</span>
+            
+          </div>
+          <div class="post-content">
+            <p>前两天，设计师给了我一张效果图，告诉我，对话框就做成这样！我内心默默的想：安卓上做长成这个样子的对话框真的好么-.-心底吐槽了一会儿还是默默的去想办法着手做了。刚接触安卓没多久，做这么一个简单的东西居然也遇到了不少问题，就在这里记录一下，也算是怎么做一个自定义对话框的总结吧。</p>
+<p>先放个目标图吧，设计师当然不会设计得这么丑，就是举个例子：<br>
+<img src="https://xushuangqing.github.io/post-images/zi-ding-yi-yi-ge-dui-hua-kuang/164542-fd63474632fd691f.png" alt="目标图" loading="lazy"></p>
+<p>对对话框的基本认识是看了这篇官方文档--&gt;<a href="http://developer.android.com/intl/zh-cn/guide/topics/ui/dialogs.html">Dialogs</a><br>
+好了，现在要开始解决这么几个问题：</p>
+<hr>
+<p>#####一. 自定义对话框的内容<br>
+安卓的对话框的内容是可以自定义的，这在官方文档中也有详细描述。所以照着官方文档的做法做就可以了。</p>
+<p>代码片段：</p>
+<pre><code>//MyDialogFragment.java
+
+public class MyDialogFragment extends DialogFragment {
+
+    @Override
+    public Dialog onCreateDialog(Bundle savedInstanceState) {
+        View customView = getActivity().getLayoutInflater().inflate(R.layout.custom_dialog, null);
+        AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
+        builder.setView(customView);
+        final Dialog dialog = builder.create();
+
+        Button okButton = (Button)customView.findViewById(R.id.dialog_ok_button);
+        okButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                dialog.dismiss();
+            }
+        });
+
+        return dialog;
+    }
+}
+</code></pre>
+<pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;utf-8&quot;?&gt;
+
+&lt;!-- custom_dialog.xml --&gt;
+
+&lt;LinearLayout xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;
+    android:orientation=&quot;vertical&quot; android:layout_width=&quot;match_parent&quot;
+    android:layout_height=&quot;match_parent&quot;
+    android:padding=&quot;30dp&quot;
+    android:background=&quot;@color/dialog_background&quot;&gt;
+
+    &lt;TextView
+        android:layout_width=&quot;wrap_content&quot;
+        android:layout_height=&quot;wrap_content&quot;
+        android:layout_gravity=&quot;center_horizontal&quot;
+        android:gravity=&quot;center&quot;
+        android:text=&quot;@string/hello_world&quot;
+        android:textColor=&quot;@color/dialog_text_color&quot;/&gt;
+
+    &lt;Button
+        android:id=&quot;@+id/dialog_ok_button&quot;
+        android:layout_width=&quot;wrap_content&quot;
+        android:layout_height=&quot;wrap_content&quot;
+        android:layout_gravity=&quot;center_horizontal&quot;
+        android:gravity=&quot;center&quot;
+        android:padding=&quot;20dp&quot;
+        android:layout_marginTop=&quot;20dp&quot;
+        android:text=&quot;@string/button_ok&quot;
+        android:textColor=&quot;@color/dialog_button_text_color&quot;
+        android:background=&quot;@color/dialog_button_background&quot;
+        /&gt;
+
+&lt;/LinearLayout&gt;
+</code></pre>
+<p>得到的效果大概是这样的：</p>
+<figure data-type="image" tabindex="1"><img src="https://xushuangqing.github.io/post-images/zi-ding-yi-yi-ge-dui-hua-kuang/164542-7aaeb1b78892d16a.png" alt="自定义内容的对话框～" loading="lazy"></figure>
+<hr>
+<p>#####二. 为按钮添加圆角</p>
+<p>稍微搜索一下，得知可以将在xml文件中，将android:background指定为一个drawable资源。所以只要在drawable资源文件夹中增加一个文件round_corner_button_background.xml：</p>
+<pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;utf-8&quot;?&gt;
+
+&lt;!--round_corner_button_background.xml--&gt;
+
+&lt;shape
+    xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;
+    android:shape=&quot;rectangle&quot;   &gt;
+    &lt;solid android:color=&quot;@color/dialog_button_background&quot; &gt;&lt;/solid&gt;
+    &lt;corners android:radius=&quot;20dp&quot;&gt; &lt;/corners&gt;
+&lt;/shape&gt;
+</code></pre>
+<p>然后将custom_dialog.xml中的Button的android:background改为：</p>
+<pre><code>android:background=&quot;@drawable/round_corner_button_background&quot;
+</code></pre>
+<p>就可以了。<br>
+得到的效果大概是这样的：<br>
+<img src="https://xushuangqing.github.io/post-images/zi-ding-yi-yi-ge-dui-hua-kuang/164542-378f0fb15ddc3ef7.png" alt="给按钮加上圆角" loading="lazy"></p>
+<hr>
+<p>#####三. 为对话框添加圆角</p>
+<p>用类似第二步的操作，企图为对话框添加圆角。结果变成了这样：<br>
+<img src="https://xushuangqing.github.io/post-images/zi-ding-yi-yi-ge-dui-hua-kuang/164542-1e37a67d1d3b10e5.png" alt="企图为对话框添加圆角0.0" loading="lazy"></p>
+<p>上网搜了搜解决方法，发现加上这行代码或许能解决问题：</p>
+<pre><code>dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+</code></pre>
+<p>但是……试了一下好像没有任何效果。</p>
+<p>再查了查，发现，如果想要让对话框自身变透明，需要直接创建Dialog对象，不能使用AlertDialog对象。<br>
+虽然觉得有一些tricky，但还是照做了TAT。</p>
+<p>修改后的MyDialogFragment.java：</p>
+<pre><code>//MyDialogFragment.java
+
+public class MyDialogFragment extends DialogFragment {
+
+    @Override
+    public Dialog onCreateDialog(Bundle savedInstanceState) {
+        View customView = getActivity().getLayoutInflater().inflate(R.layout.custom_dialog, null);
+        final Dialog dialog = new Dialog(getActivity());
+        dialog.setContentView(customView);
+        dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+
+        Button okButton = (Button)customView.findViewById(R.id.dialog_ok_button);
+        okButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                dialog.dismiss();
+            }
+        });
+
+        dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        return dialog;
+    }
+}
+</code></pre>
+<p>效果变成了这样：</p>
+<figure data-type="image" tabindex="2"><img src="https://xushuangqing.github.io/post-images/zi-ding-yi-yi-ge-dui-hua-kuang/164542-c31cf9eb94d9017c.png" alt="使用Dialog而不是AlertDialog" loading="lazy"></figure>
+<p>突然发现，对话框背后的阴影也消失了，正好也是我需要的！</p>
+<hr>
+<p>#####四. 去除那条蓝色的线</p>
+<p>这时的问题是：为什么多出了一条蓝色的线？这条线应该是安卓上熟悉的对话框标题下面的那条线0.0<br>
+搜索了一下怎么去除那条线，发现可以使用这行代码：</p>
+<pre><code>dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
+</code></pre>
+<p>添加上去后，看起来还挺顺利的，不过需要注意的是，这行代码必须在</p>
+<pre><code>dialog.setContentView(customView);
+</code></pre>
+<p>之前调用，不然会crash。</p>
+<p>现在的效果：</p>
+<figure data-type="image" tabindex="3"><img src="https://xushuangqing.github.io/post-images/zi-ding-yi-yi-ge-dui-hua-kuang/164542-1156548f92431f60.png" alt="现在的效果～" loading="lazy"></figure>
+<hr>
+<p>#####五. 自定义对话框的大小</p>
+<p>刚刚那一步中，调用了</p>
+<pre><code>dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
+</code></pre>
+<p>这行代码后，发现对话框的大小也直接变化了，真是意外收获。这样只要在custom_dialog.xml文件中排排版，让对话框变成需要的大小就好了。<br>
+如果这样做不行的话，也可以在java代码中这样写：</p>
+<pre><code>dialog.getWindow().setLayout(widthInPx, heightInPx);
+</code></pre>
+<p>不过这里的widthInPx和heightInPx都是以px为单位的，需要将dp转换一下。</p>
+<p>最终效果就是这样啦：</p>
+<figure data-type="image" tabindex="4"><img src="https://xushuangqing.github.io/post-images/zi-ding-yi-yi-ge-dui-hua-kuang/164542-77740ba653f96141.png" alt="最终效果" loading="lazy"></figure>
+<hr>
+<p>虽然写这篇文的时候还觉得一切都挺顺利的，但是之前做的时候还挺抓狂QAQ</p>
+<p>#####参考资料<br>
+<a href="http://developer.android.com/intl/zh-cn/guide/topics/ui/dialogs.html">Dialogs</a><br>
+<a href="http://stackoverflow.com/questions/16861310/android-dialog-rounded-corners-and-transparency">Android Dialog - Rounded Corners and Transparency</a><br>
+<a href="http://stackoverflow.com/questions/29339069/android-dialog-in-custom-style-remove-blue-line-and-set-actionbar-color">Android Dialog in Custom Style: Remove Blue Line and set ActionBar Color</a></p>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/yong-ColorFilter-wei-an-zhuo-an-niu-zeng-jia-xiao-guo/">
+              <h3 class="post-title">
+                下一篇：用ColorFilter为安卓按钮增加效果
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

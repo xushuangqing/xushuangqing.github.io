@@ -1,0 +1,290 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>一个method swizzling实验 | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">一个method swizzling实验</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2016-05-10</span>
+            
+          </div>
+          <div class="post-content">
+            <p>今天想用method swizzling的时候，突然想到了一个问题，如果swizzle了一个父类（而不是当前类）的方法，会怎么样呢？</p>
+<p>于是写了点代码试验一下。</p>
+<p>首先定义一个基类<code>XSQBaseObject</code>，其中有一个<code>baseMethod</code>方法：</p>
+<pre><code>//XSQBaseObject.h
+
+#import &lt;Foundation/Foundation.h&gt;
+
+@interface XSQBaseObject : NSObject
+
+- (void)baseMethod;
+
+@end
+</code></pre>
+<pre><code>//XSQBaseObject.m
+
+#import &quot;XSQBaseObject.h&quot;
+
+@implementation XSQBaseObject
+
+- (void)baseMethod {
+    NSLog(@&quot;this is base method&quot;);
+}
+
+@end
+</code></pre>
+<p>然后定义一个子类<code>XSQChildObject</code>继承自<code>XSQBaseClass</code>，子类里没有写任何方法。</p>
+<pre><code>//XSQChildObject.h
+
+#import &quot;XSQBaseObject.h&quot;
+
+@interface XSQChildObject : XSQBaseObject
+
+@end
+</code></pre>
+<pre><code>//XSQChildObject.m
+
+#import &quot;XSQChildObject.h&quot;
+
+@implementation XSQChildObject
+
+@end
+</code></pre>
+<p>然后给<code>XSQChildObject</code>增加一个category，用来做swizzling：</p>
+<pre><code>//XSQChildObject+Swizzling.h
+
+#import &quot;XSQChildObject.h&quot;
+
+@interface XSQChildObject (Swizzling)
+
+@end
+</code></pre>
+<pre><code>//XSQChildObject+Swizzling.m
+
+#import &quot;XSQChildObject+Swizzling.h&quot;
+#import &lt;objc/runtime.h&gt;
+
+@implementation XSQChildObject (Swizzling)
+
++ (void)load {
+    static dispatch_once_t onceToken;
+    dispatch_once(&amp;onceToken, ^{
+        Class class = [self class];
+        // When swizzling a class method, use the following:
+        // Class class = object_getClass((id)self);
+        
+        SEL originalSelector = @selector(baseMethod);
+        SEL swizzledSelector = @selector(xxx_baseMethod);
+        
+        Method originalMethod = class_getInstanceMethod(class, originalSelector);
+        Method swizzledMethod = class_getInstanceMethod(class, swizzledSelector);
+        
+        BOOL didAddMethod =
+        class_addMethod(class,
+                        originalSelector,
+                        method_getImplementation(swizzledMethod),
+                        method_getTypeEncoding(swizzledMethod));
+        
+        if (didAddMethod) {
+            class_replaceMethod(class,
+                                swizzledSelector,
+                                method_getImplementation(originalMethod),
+                                method_getTypeEncoding(originalMethod));
+        } else {
+            method_exchangeImplementations(originalMethod, swizzledMethod);
+        }
+    });
+}
+
+#pragma mark - Method Swizzling
+
+- (void)xxx_baseMethod {
+    NSLog(@&quot;swizzle~~&quot;);
+    [self xxx_baseMethod];
+}
+
+@end
+</code></pre>
+<p>swizzling的代码参考自<a href="http://southpeak.github.io/blog/2014/11/06/objective-c-runtime-yun-xing-shi-zhi-si-:method-swizzling/">Objective-C Runtime 运行时之四：Method Swizzling</a></p>
+<p>然后给<code>XSQChildObject</code>的实例发送消息：</p>
+<pre><code>XSQBaseObject *baseObject = [[XSQBaseObject alloc] init];
+[baseObject baseMethod];
+
+XSQChildObject *childObject = [[XSQChildObject alloc] init];
+[childObject baseMethod];
+</code></pre>
+<p>竟然平安无事的得到了结果：</p>
+<pre><code>2016-05-09 20:46:06.220 XSQSwizzlingDemo[4235:1321820] this is base method
+2016-05-09 20:46:08.055 XSQSwizzlingDemo[4235:1321820] swizzle~~
+2016-05-09 20:46:08.056 XSQSwizzlingDemo[4235:1321820] this is base method
+</code></pre>
+<p>明明我还在担心，父类的方法如果被swizzle了，应该会出现这样的情景：</p>
+<figure data-type="image" tabindex="1"><img src="https://xushuangqing.github.io/post-images/yi-ge-method-swizzling-shi-yan/164542-091f0dbba1da64f0.png" alt="" loading="lazy"></figure>
+<p>给<code>XSQBaseObject</code>的实例发送<code>baseMethod</code>消息时，实际调用的是<code>xxx_baseMethodIMP</code>的实现，而<code>xxx_baseMethodIMP</code>中还给<code>[self xxx_baseMethod]</code>发送了消息，而<code>XSQBaseObject</code>中没有<code>xxx_baseMethod</code>这个selector，走到这里应该崩溃才对。</p>
+<p>仔细看一下swizzling的代码，发现这段代码中已经对我担心的问题做了处理：</p>
+<pre><code>/*
+ * class_addMethod方法会给这个类添加一个方法
+ * 如果这个类（本身，不包括父类）已经有了originalSelector，则无法添加成功，同时返回NO
+ * 所以这里的意义是：如果这个类（自身，不包括父类）没有originSelector，则给它添加一个方法，而方法实现对应于swizzledMethod
+ */
+BOOL didAddMethod =
+class_addMethod(class,
+                originalSelector,
+                method_getImplementation(swizzledMethod),
+                method_getTypeEncoding(swizzledMethod));
+
+/*
+ * 如果给这个类添加originSelector成功，则让这个类的swizzledSelector的实现变成originalMethod
+ */
+if (didAddMethod) {
+    class_replaceMethod(class,
+                        swizzledSelector,
+                        method_getImplementation(originalMethod),
+                        method_getTypeEncoding(originalMethod));
+}
+</code></pre>
+<p>这段代码应对的就是，如果originalSelector是父类中的方法，而子类也没有重写它，这时就不能直接交换两个方法的实现，而是要给子类也添加一个originalSelector的实现。</p>
+<p>如果把上面这段代码删除，全部用<code>method_exchangeImplementations</code>来做swizzle：</p>
+<pre><code>+ (void)load {
+    static dispatch_once_t onceToken;
+    dispatch_once(&amp;onceToken, ^{
+        Class class = [self class];
+        // When swizzling a class method, use the following:
+        // Class class = object_getClass((id)self);
+        
+        SEL originalSelector = @selector(baseMethod);
+        SEL swizzledSelector = @selector(xxx_baseMethod);
+        
+        Method originalMethod = class_getInstanceMethod(class, originalSelector);
+        Method swizzledMethod = class_getInstanceMethod(class, swizzledSelector);
+        
+        method_exchangeImplementations(originalMethod, swizzledMethod);
+    });
+}
+</code></pre>
+<p>果然运行时崩溃了：</p>
+<pre><code>2016-05-09 21:10:55.523 XSQSwizzlingDemo[4247:1325552] swizzle~~
+2016-05-09 21:10:55.526 XSQSwizzlingDemo[4247:1325552] -[XSQBaseObject xxx_baseMethod]: unrecognized selector sent to instance 0x155e189d0
+2016-05-09 21:10:55.527 XSQSwizzlingDemo[4247:1325552] *** Terminating app due to uncaught exception 'NSInvalidArgumentException', reason: '-[XSQBaseObject xxx_baseMethod]: unrecognized selector sent to instance 0x155e189d0'
+</code></pre>
+<p>和图片中画的一致，给<code>XSQBaseObject</code>的实例发送<code>baseMethod</code>消息时，执行了<code>xxx_baseMethod</code>的实现（所以第一行输出了“swizzle~~”），然后发送了<code>[self xxx_baseMethod]</code>消息给<code>XSQBaseObject</code>的实例，自然抛出了unrecognized selector异常。</p>
+<hr>
+<p>####参考<br>
+<a href="http://southpeak.github.io/blog/2014/11/06/objective-c-runtime-yun-xing-shi-zhi-si-:method-swizzling/">Objective-C Runtime 运行时之四：Method Swizzling</a></p>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/《Effective-Objective-C-2-0》-du-shu-bi-ji/">
+              <h3 class="post-title">
+                下一篇：《Effective Objective C 2.0》读书笔记
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

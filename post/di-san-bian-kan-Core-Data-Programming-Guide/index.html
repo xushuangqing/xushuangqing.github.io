@@ -1,0 +1,352 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>第三遍看Core Data Programming Guide | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">第三遍看Core Data Programming Guide</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2015-06-14</span>
+            
+          </div>
+          <div class="post-content">
+            <p>虽然从接触iOS开发开始，做的每一个项目都在用Core Data，但是一些比较底层的东西都是boss写的或者用的是Restkit这个开源项目。所以虽然之前看过两遍<a href="https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/CoreData/cdProgrammingGuide.html#//apple_ref/doc/uid/TP30001200-SW1">Core Data Programming Guide</a>，还有很多不理解或者不熟练或者做得不好的地方。所以第三遍看，想要把以前不理解的地方弄得清晰一点。</p>
+<p>Core Data框架是独立于Cocoa的，所以对于没有界面的程序，也可以应用Core Data。为了方便，这里我自己试验的代码都是在一个Command Line tool工程里的0.0</p>
+<hr>
+<p>###关于Persistent Stack</p>
+<br>
+对象和外部数据存储，这两者之间的媒介，被整体叫做persistence stack。其中，managed object context位于栈顶，persistent object store位于栈底，中间的是persistent store coordinator。
+<figure data-type="image" tabindex="1"><img src="https://xushuangqing.github.io/post-images/di-san-bian-kan-Core-Data-Programming-Guide/164542-eff2d93c22e5d479.png" alt="Persistent stack" loading="lazy"></figure>
+<p>实际上，是persistent store coordinator决定着这个栈。它使用了facade模式，使得栈底的多个persistent store，在呈现给context的时候，就像一个整体一样。<br>
+一个coordinator只能和一个managed object model相关联。</p>
+<hr>
+<p>###关于Managed Object Model</p>
+<br>
+一个managed object model是NSManagedObjectModel类的实例。它描述了第三方app中需要使用到的一系列entity，和多个entity之间的关系。
+一个model中可能有很多NSEntityDescription对象来代表这个model的各个entity。对于每个entity来说，有两个很重要的特性，一个是**这个entity的名字**，另一个是**在运行时，表示这个entity的类的名字**。
+<p>一个entity可能会有attribute、relationship，也可能有fetched property，这三者统称为property。需要注意的是，property不能和NSObject或NSManagedObject已有的方法名重叠，比如，不能给某个property起名为“description”。<br>
+比较特殊的一种property叫做transient property，它是不会被保存到persistent store中去的。</p>
+<p>多个entity之间可能会有继承关系，也可能某个entity会被指定为抽象的。</p>
+<p>大多数model中的元素（比如entity、attribute、relationship）都会有一个对应的user info。</p>
+<hr>
+<p>###创建一个model</p>
+<br>
+#####使用Xcode创建model
+<br>
+在Xcode中，选择File->New->File->Core Data->Data Model就可以创建一个扩展名为.xcdatamodeld的“源文件”了（实际上应该是一个目录）。其中包含了一个扩展名为.xcdatamodel的“源文件”。可以使用Xcode的Core Data model editor，在xcdatamodel文件中编辑model的内容，比如其中包含什么样的entity，每个entity中有什么样的attribute，以及各个entity之间的关系，等等。
+<p>如果App更新时，需要对model进行改动，就需要创建一个新的model version。在Xcode中，选中xcdatamodeld，选择Editor-&gt;Add Model Version，可以继续创建其中的xcdatamodel“源文件”。</p>
+<p>除了model中关于entity和property的各种信息，xcdatamodel还会包含一些其他信息，比如绘制的图表的宽高排列之类的，但这些信息在运行时并没有什么意义。所以，model文件的编译工具momc会把运行时没有意义的信息去掉，将xcdatamodel文件编译成mom文件，将xcdatamodeld目录编译成momd目录。</p>
+<p>在Xcode中找到编译好的.app文件，右键Show in Finder，打开里面的内容后，可以看到其中的.momd文件夹，和这个文件夹里面的.mom文件。</p>
+<p>如果写的是iOS上的app，则在需要程序员自己加载model文件。有这样两种方法：</p>
+<ol>
+<li>使用NSManagedObjectModel的initWithContentOfURL:方法。<br>
+这是一种比较普遍使用的方法。</li>
+</ol>
+<pre><code>NSURL *modelURL = [[NSBundle mainBundle] URLForResource:modelName withExtension:@&quot;momd&quot;];
+NSManagedObjectModel *model = [[NSManagedObjectModel alloc] initWithContentsOfURL:modelURL];
+</code></pre>
+<ol start="2">
+<li>使用<code>mergedModelFromBundles:</code>方法.<br>
+如果参数是nil，则会搜索main bundle，把其中的所有model给merge起来。</li>
+</ol>
+<p>#####在代码中创建\修改model</p>
+<br>
+在model被一个managed object context或者一个persistent store coordinator使用之前，这个model是可以在代码中被修改的。这允许程序员动态的创建或修改model。
+<p>试了一下在代码中创建model：</p>
+<pre><code>NSManagedObjectModel *model = [[NSManagedObjectModel alloc] init];
+NSEntityDescription *launchInfoEntity = [[NSEntityDescription alloc] init];
+[launchInfoEntity setName:@&quot;LaunchInfo&quot;];
+
+NSAttributeDescription *dateAttribute = [[NSAttributeDescription alloc] init];
+[dateAttribute setName:@&quot;date&quot;];
+[dateAttribute setAttributeType:NSDateAttributeType];
+[dateAttribute setOptional:NO];
+
+[launchInfoEntity setProperties:@[dateAttribute]];
+
+[model setEntities:@[launchInfoEntity]];
+</code></pre>
+<p>如果model是在被一个managed object context或者一个persistent store coordinator使用之后，受到改动，则会抛出exception：</p>
+<pre><code>*** Terminating app due to uncaught exception 'NSInternalInconsistencyException', reason: 'Can't modify an immutable model.'
+</code></pre>
+<hr>
+<p>###Fetch Request Template</p>
+<br>
+程序员可以使用NSFetchRequest类来描述从持久化存储中取得一些对象的请求。在实际的开发中，同样或相似的请求往往会被执行多次，所以，程序员可以自定义一些fetch request template，并把它们存到model中。可以使用Xcode的Core Data model editor，也可以在代码中定义。
+<p>######使用Core Date model editor定义fetch request template</p>
+<br>
+Editor->Add FetchRequest来新建一个fetch request。
+<p>填写Predicate，可以使用变量。右边栏还可以指定一些高级选项。</p>
+<figure data-type="image" tabindex="2"><img src="https://xushuangqing.github.io/post-images/di-san-bian-kan-Core-Data-Programming-Guide/164542-bccca64bbdd645b1.png" alt="指定Predicate" loading="lazy"></figure>
+<p>在需要使用时，只要在代码中取出对应的fetch request template：</p>
+<pre><code>NSManagedObjectModel *managedObjectModel = [[context persistentStoreCoordinator] managedObjectModel];
+NSFetchRequest *fetchRequest = [managedObjectModel fetchRequestFromTemplateWithName:@&quot;fetchLaunchInfoBeforeSomeDate&quot;
+                                                              substitutionVariables:@{@&quot;DATE&quot; : [NSDate date]}];
+NSArray *fetchResult = [context executeFetchRequest:fetchRequest error:&amp;error];
+</code></pre>
+<p>就可以正常使用了。</p>
+<p>######直接在代码中创建fetch request template</p>
+<br>
+也可以完全动态的创建fetch request template：
+```
+NSManagedObjectModel *managedObjectModel = [[context persistentStoreCoordinator] managedObjectModel];
+NSFetchRequest *fetchRequestTemplate = [[NSFetchRequest alloc] initWithEntityName:@"LaunchInfo"];
+[fetchRequestTemplate setPredicate:[NSPredicate predicateWithFormat:@"date > $DATE"]];
+[managedObjectModel setFetchRequestTemplate:fetchRequestTemplate forName:@"fetchLaunchInfoAfterSomeDate"];
+```
+<hr>
+<p>###关于Configuration</p>
+<br>
+如果程序员想要把不同的entity存放到不同的persistent store中去，应该怎么做呢？一个coordinator只能对应一个managed object model，所以在默认情况下，每一个与这个coordinator相关联的persistent store，都存放了同样的entity。为了避免这样的限制，可以使用Configuration来指定每个persistent store中应该存放哪些entity。
+指定了Configuration之后，当程序员取这些对象的时候，它们会自动从不同的文件中被取出；保存时，它们也会被自动保存到不同的文件。
+<p>一个configuration由名字和若干entity组成。可以在代码中用</p>
+<pre><code>setEntities:forConfiguration:
+</code></pre>
+<p>方法动态的定义configuration；</p>
+<p>也可以在Core Data editor tool中定义：<br>
+<img src="https://xushuangqing.github.io/post-images/di-san-bian-kan-Core-Data-Programming-Guide/164542-1217b8dd35f301ac.png" alt="指定Configuration" loading="lazy"></p>
+<p>每当给coordinator增加persistent store的时候，只用在configuration参数中指定对应的configuration即可以使用：</p>
+<pre><code>if (![coordinator addPersistentStoreWithType:NSSQLiteStoreType
+                               configuration:@&quot;ExitInfoConfiguration&quot;
+                                         URL:exitInfoStoreURL
+                                     options:nil
+                                       error:&amp;error]) {
+    //Handle error
+}
+
+if (![coordinator addPersistentStoreWithType:NSSQLiteStoreType
+                               configuration:@&quot;LaunchInfoConfiguration&quot;
+                                         URL:launchInfoStoreURL
+                                     options:nil
+                                       error:&amp;error]) {
+    //Handle error
+}
+</code></pre>
+<hr>
+<p>###关于Managed Object</p>
+<br>
+一个managed object代表的是一个entity的实例。
+<p>每个managed object与一个managed object context相关联。在一个特定的context中，持久化存储中的一个特定的记录，只能有一个对应的managed object，这种技术叫做Uniquing。但是，也可能有多个context，每个context都持有一个表示同一条记录的managed object。</p>
+<hr>
+<p>###关于accessor方法</p>
+<br>
+可以使用Xcode根据xcdatamodel中的内容自动生成NSManagedObject的子类。在子类的实现中，我们能看到，property被```@dynamic```修饰了。那是因为Core Data会在运行时动态生成accessor方法，这样生成的accessor方法是比较高效的，也就是说，程序员一般不需要写自定义的accessor方法。
+<p>也可以通过key-value的形式来获取或设置attributes的值，但是在性能上KVC不如accessor方法，所以只应该在必要的情况下使用。</p>
+<p>如果这个managed object有to-many relationship，很多时候，程序员可能会需要增添、删除或改动这个to-many relationship中的某几个元素，这个时候则应该使用<code>mutableSetValueForKey:</code>方法或者动态生成的relationship mutator方法。</p>
+<hr>
+<p>###关于Managed Object的生命周期</p>
+<br>
+一个managed object的生命周期和标准的Cocoa对象的生命周期不太一样，因为那是由Core Data来管理的。一个managed object表示的数据的生命周期，和这个manged object的实例的生命周期是独立的。
+<p>可以通过一个managed object得到它所在的context，也可以通过一个context得到其中的managed object。但是默认情况下，managed object和context之间的引用是弱引用。然而有一种例外情况，context会对“被改动过的”managed object持强引用，这里的改动包括插入、删除和修改，直到context被save、reset或者rollback。同时，undo manager也会用强引用来维持被改动过的managed object。<br>
+可以用<code>setRetainsRegisteredObjects:</code>方法改变这种默认情况，使得context对managed object持强引用。</p>
+<p>当managed object有relationship的时候，它会对这个关联的对象持强引用，这也意味着可能有强引用循环出现。所以，当使用完一个managed object的时候，应该用<code>refreshObject:mergeChanges:</code>方法让它成为一个fault。</p>
+<p>在一个managed object被创建的时候，其中每个property的值是在对应的entity中的default value。如果需要做一些自定义的初始化，建议重写：<code>awakeFromInsert</code>或者<code>awakeFromFetch</code>方法。</p>
+<p>其中，<code>awakeFromInsert</code>会在调用了<code>initWithEntity:insertIntoManagedObjectContext:</code>或者<code>insertNewObjectForEntityForName:inManagedObjectContext:</code>方法之后立刻被调用。所以，重写这个方法，主要是可以为managed object中的property提供特殊的默认值，比如这个对象被创建的时间。</p>
+<p><code>awakeFromFetch</code>方法会在managed object从一个持久化存储中被取出来的时候调用。重写这个方法，可以用于建立transient值和缓存。需要注意的是，如果在这个方法中，改变了managed object中某些property，context不会被认为是dirty的。这也就意味着不应该在这个方法中操纵relationship，因为目标对象不会为此做出应有的改变。</p>
+<p><code>initWithEntity:insertIntoManagedObjectContext:</code> 这个方法也可以重写，但是并不鼓励这样做。因为在重写的这个方法中改变的状态，可能会不支持undo和redo。</p>
+<p>在需要“析构”的时候，不应该重写<code>dealloc</code>方法，而是应该重写<code>didTurnInfoFault</code>方法。这个方法会在managed object变成fault的时候被调用，也就是说会比真正的析构早一些。</p>
+<hr>
+<p>###关于Relationship</p>
+<br>
+大多数的relationship天生就是双向的（一个主要的例外就是fetched property）。一般来说，在使用Core Data的时候，也应该为relationship指定反向关系，这样可以确保object graph的一致性。
+<p>一个relationship是有delete rule的。这指定了当这个对象即将被删除的时候应该发生的行为。有这样几种delete rule：</p>
+<ol>
+<li>
+<p>Deny<br>
+如果至少有一个relationship的目的对象存在，源对象是不能被删除的；</p>
+</li>
+<li>
+<p>Nullify<br>
+在删除当前对象的同时，将relationship的目的对象的反向关系设置为null；</p>
+</li>
+<li>
+<p>Cascade<br>
+在删除当前对象的同时，也删除relationship的目的对象；</p>
+</li>
+<li>
+<p>No Action<br>
+在删除当前对象的同时，对relationship的目的对象不做任何操作。在使用这个delete rule的时候，程序员有责任自行维护object graph，所以应该将对应的反向关系设置成有意义的值。</p>
+</li>
+</ol>
+<hr>
+<p>###关于Object ID</p>
+<br>
+一个NSManagedObjectID对象是managed object的全局ID。Object ID有临时和持久之分。当一个managed object刚刚被创建时，它将获得一个临时的object ID；只有当它被保存到持久化存储中时，它才会被赋予一个持久的ID。
+<p>Object ID也可以被转化成URI。可以使用 <code>managedObjectIDForURIRepresentation:</code>方法或<code>objectWithID:</code>方法通过URI或ID获取对应的managed object。</p>
+<hr>
+<p>###关于Validation</p>
+<br>
+Validation机制用于检验managed object的property的值是否满足一定条件。有两种validation的类型，分别是：
+1. property层次的validation
+2. property之间的validation
+<p>Core Data允许程序员在managed object model中设定简单的validation逻辑。比如，可以设置数字和日期的最大最小值，可以设置字符串的最大最小长度、需要匹配的正则表达式，还可以设置to-many relationship中数目的最大最小值。</p>
+<figure data-type="image" tabindex="3"><img src="https://xushuangqing.github.io/post-images/di-san-bian-kan-Core-Data-Programming-Guide/164542-4aa26bc9e1dc2d50.png" alt="在Core Data Model editor中可以设置一些validation逻辑" loading="lazy"></figure>
+<p>除了可以对model设置这些validation逻辑，还可以在代码中进行自定义。</p>
+<p>如果想要自定义property层次的validation，程序员不应该重写<code>validateValue:forKey:error:</code>方法，而是应该实现<code>validate&lt;Key&gt;:error:</code>方法。<br>
+然而，如果想要自行检查某个property是否符合规定，应该调用的是<code>validateValue:forKey:error:</code>方法，这个方法会将定义在managed object model中的validation逻辑也考虑进去。</p>
+<p>也可以自定义property之间的validation。这可以通过重写<code>validateForUpdate:</code>、<code>validateForInsert:</code>和<code>validateForDelete:</code>方法来实现。在重写的这三个方法中，应该首先调用父类的实现。</p>
+<p>所有的validation限制都只有在保存操作的过程中会被应用。因为managed object context的本意就是一块草稿板，所以应该允许其中的对象有临时性的“不合理”。</p>
+<hr>
+<p>###关于Faulting</p>
+<br>
+一个managed object通常会用于表示被持久化存储的数据，但是在有些情况下，一个managed object可能是fault的，也就是说它的property还没有从外部数据存储中载入进来。这是Core Data用于减少内存占用的一种机制。
+<p>当访问到一个managed object的某个持久化的property的时候，fault被触发了，如果内存中的cache没有被击中的话，数据会被自动从持久化存储中取过来，这里的开销是比较昂贵的。</p>
+<p>需要注意的是，<code>description</code>方法是不会触发fault的，所以打印刚刚取出来的managed object可以看到“<fault>”字样。<br>
+比如这样：</p>
+<pre><code>&quot;&lt;LaunchInfo: 0x10060b450&gt; (entity: LaunchInfo; id: 0x40000b &lt;x-coredata://4973AB39-0CD8-4480-AA07-7A3A877BE87D/LaunchInfo/p1&gt; ; data: &lt;fault&gt;)&quot;
+</code></pre>
+<p>如果重写<code>description</code>方法，并在其中访问了某个持久化的property，则fault会被触发。所以应该尽量避免这样的做法。</p>
+<p>可以使用<code>refreshObject:mergeChanges:</code>并传人参数no让一个managed object变成fault。但是必须保证其中的relationship没有被改变。</p>
+<hr>
+<p>###关于Fetching</p>
+<br>
+#####取得指定的对象
+如果app使用了多个context，那么程序员可能就需要测试一个对象是否已经从persistent store中被删除了。这时，可以创建一个fetch request，其中这样指定predicate：
+```
+NSPredicate *predicate = [NSPredicate predicateWithFormat:@"self == %@", targetObject];
+```
+这样就可以通过判断fetch到的对象的数目是否为0来判断目标对象是否已被删除。其中的```targetObject```可以是一个managed object，也可以是一个manged object ID。
+如果一次需要测试多个目标对象是否被删除，可以使用更高效的IN操作符：
+```
+NSPredicate *predicate = [NSPredicate predicateWithFormat:@"self IN %@", arrayOfManagedObjectIDs];
+```
+<p>#####获取特定的值</p>
+<br>
+有的时候，程序员可能不需要获取整个managed object，而是只是需要其中的某个attribute。NSExpressionDescription可以帮助程序员取得需要的值。
+这时，需要使用```setResultType:```方法来指定这个fetch返回的结果类型是```NSDictionaryResultType```；还需要创建NSExpressionDescription的实例，来指定哪些property是需要取得的。
+[官方文档](https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/CoreData/Articles/cdFetching.html#//apple_ref/doc/uid/TP40002484-SW6)里有示例代码，偷个懒。
+<hr>
+<p>###还欠缺的部分</p>
+<br>
+这篇博客真是拖着写了好久。
+但是还有好多内容没有理解，因为偷懒+之前在工作中对这些部分接触不多没什么感受，所以先放在这里，等下一遍看的时候，再慢慢理解好了。
+<p><a href="https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/CoreData/Articles/cdUsingMOM.html#//apple_ref/doc/uid/TP40005190-SW13">Localizing a Managed Object Model</a><br>
+<a href="https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/CoreData/Articles/cdUsingMOs.html#//apple_ref/doc/uid/TP40001803-213600">Copying and Copy and Paste</a><br>
+<a href="https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/CoreData/Articles/cdUsingMOs.html#//apple_ref/doc/uid/TP40001803-SW2">Drag and Drop</a><br>
+<a href="https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/CoreData/Articles/cdUsingMOs.html#//apple_ref/doc/uid/TP40001803-207821-TPXREF148">Undo Management</a><br>
+<a href="https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/CoreData/Articles/cdUsingMOs.html#//apple_ref/doc/uid/TP40001803-208900">Ensuring Data Is Up-to-Date</a><br>
+<a href="https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/CoreData/Articles/cdMemory.html#//apple_ref/doc/uid/TP40001860-SW2">Change and Undo Management</a><br>
+<a href="https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/CoreData/Articles/cdRelationships.html#//apple_ref/doc/uid/TP40001857-SW7">Fetched Properties</a><br>
+<a href="https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/CoreData/Articles/cdNSAttributes.html#//apple_ref/doc/uid/TP40001919-SW1">Non-Standard Persistent Attributes</a><br>
+<a href="https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/CoreData/Articles/cdUsingPersistentStores.html#//apple_ref/doc/uid/TP40006453-SW4">Associate Metadata With a Store to Provide Additional Information and Support Spotlight Indexing</a><br>
+<a href="https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/CoreData/Articles/cdBindings.html#//apple_ref/doc/uid/TP40004194-SW1">Core Data and Cocoa Bindings</a><br>
+<a href="https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/CoreData/Articles/cdChangeManagement.html#//apple_ref/doc/uid/TP30001201-CJBDBHCB">Change Management</a><br>
+<a href="https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/CoreData/Articles/cdPersistentStores.html#//apple_ref/doc/uid/TP40002875-SW1">Persistent Store Features</a><br>
+<a href="https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/CoreData/Articles/cdPerformance.html#//apple_ref/doc/uid/TP40003468-SW1">Core Data Performance</a><br>
+<a href="https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/CoreData/Articles/cdTroubleshooting.html#//apple_ref/doc/uid/TP40002320-SW1">Troubleshooting Core Data</a><br>
+<a href="https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/CoreData/Articles/cdImporting.html#//apple_ref/doc/uid/TP40003174-SW1">Efficiently Importing Data</a></p>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/zi-ding-yi-yi-ge-dui-hua-kuang/">
+              <h3 class="post-title">
+                下一篇：自定义一个对话框
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

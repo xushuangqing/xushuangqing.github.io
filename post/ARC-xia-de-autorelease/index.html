@@ -1,0 +1,301 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>ARC下的autorelease | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">ARC下的autorelease</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2016-03-10</span>
+            
+          </div>
+          <div class="post-content">
+            <p>发现我从接触iOS开发到现在，几乎都没有使用过autorelease这个词。在ARC内存管理方式下，就像不能发送<code>release</code>和<code>retain</code>消息一样，程序员也不能对某个对象发送<code>autorelease</code>消息，让我几乎忘记了它的存在。所以今天突然想起来，应该查查ARC下autorelease的正确使用姿势(¬_¬)</p>
+<hr>
+<p>###内存管理原则</p>
+<br>
+在内存管理方面，cocoa设立了一些[基本原则](https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/MemoryMgmt/Articles/mmRules.html)，其中有这样一条：
+>**You own any object you create**
+You create an object using a method whose name begins with “alloc”, “new”, “copy”, or “mutableCopy”.
+<blockquote>
+<p>用以alloc/new/copy/mutableCopy为前缀的方法名创建的对象，是自己创建并持有的。</p>
+</blockquote>
+<p>这条原则在ARC和MRC下都需要遵守。</p>
+<p>比如cocoa中有很多工厂方法，它们不以alloc/new/copy/mutableCopy开头，所以按照约定，它们返回的对象不应该被持有。在MRC下，一种可能的实现方式大概是这样：</p>
+<pre><code>/*
+ * MRC，此段代码摘抄自[《Objective-C 高级编程》](https://book.douban.com/subject/24720270/)
+ */
+
+- (id)object
+{
+    id obj = [[NSObject alloc] init];
+
+    /*
+     * 自己持有对象
+     */
+
+    [obj autorelease];
+
+    /*
+     * 取得对象的存在，但自己不持有对象
+     */
+
+    return obj;
+}
+</code></pre>
+<p>但是在ARC中，程序员不能对一个对象发送<code>autorelease</code>消息，那么如何将一个对象注册到autorelease pool中，又如何遵循以上的这个原则呢？看来，开启ARC后，编译器帮助我们做了不少事情。</p>
+<hr>
+<p>###__autoreleasing修饰符</p>
+<br>
+切换到ARC之后，每个指向OC对象的指针，都被赋上了所有权修饰符。一共有```__strong```、```__weak```、```__unsafe_unretained```和```__autoreleasing```这样四种所有权修饰符。
+<p>当一个对象被赋值给一个使用<code>__autoreleasing</code>修饰符修饰的指针时，相当于这个对象在MRC下被发送了<code>autorelease</code>消息，也就是说它被注册到了autorelease pool中。</p>
+<p>全局变量和实例变量是无法用<code>__autoreleasing</code>来修饰的，不然编译器会报错：<br>
+<img src="https://xushuangqing.github.io/post-images/ARC-xia-de-autorelease/164542-fe988eace2ff6ae1.png" alt="" loading="lazy"></p>
+<p>而局部变量用<code>__autoreleasing</code>修饰后，其指向的对象，在当前autorelease pool结束之前不会被回收：</p>
+<pre><code>__weak NSObject *weakObj1;
+__weak NSObject *weakObj2;
+
+{
+    __autoreleasing NSObject *obj1 = [[NSObject alloc] init];
+    weakObj1 = obj1; //weakObj1指向的对象已被注册到autorelease pool
+    
+    __strong NSObject *obj2 = [[NSObject alloc] init];
+    weakObj2 = obj2;//weakObj2指向的对象没有被注册到autorelease pool
+}
+//局部变量obj1和obj2的作用域结束，
+//此时weakObj2指向的对象不再被强引用，因此被回收；
+//而obj1指向的对象仍然在autorelease pool中
+
+NSLog(@&quot;%@&quot;, weakObj1);//输出&lt;NSObject: 0x100206030&gt;，因为此刻weakObj1在autorelease pool中，不会因为obj1作用域的结束而被回收
+NSLog(@&quot;%@&quot;, weakObj2);//输出null
+</code></pre>
+<hr>
+<p>###方法名检查</p>
+<br>
+写这样一段代码：
+```
+@interface XSQObject : NSObject
+<ul>
+<li>(NSString *)newHelloWorldString;</li>
+<li>(NSString *)helloWorldString;</li>
+</ul>
+<p>@end</p>
+<p>@implementation XSQObject</p>
+<ul>
+<li>
+<p>(NSString *)newHelloWorldString {<br>
+    return [[NSString alloc] initWithCString:&quot;HelloWorld&quot; encoding:NSUTF8StringEncoding];<br>
+}</p>
+</li>
+<li>
+<p>(NSString *)helloWorldString {<br>
+    return [[NSString alloc] initWithCString:&quot;HelloWorld&quot; encoding:NSUTF8StringEncoding];<br>
+}</p>
+</li>
+</ul>
+<p>@end</p>
+<p>int main(int argc, const char * argv[]) {<br>
+    @autoreleasepool {<br>
+        <br>
+        __weak NSString *helloWorldString = [XSQObject helloWorldString];<br>
+        __weak NSString *newHelloWorldString = [XSQObject newHelloWorldString];<br>
+//此处有warning:<br>
+//assigning retained object to weak variable;<br>
+//object will be released after assignment</p>
+<p>NSLog(@&quot;%@&quot;, helloWorldString);//输出HelloWorld<br>
+        NSLog(@&quot;%@&quot;, newHelloWorldString);//输出null<br>
+        <br>
+    }<br>
+    return 0;<br>
+}</p>
+<pre><code>
+虽然``` [XSQObject helloWorldString]```和```[XSQObject newHelloWorldString]```两个方法的实现完全一样，但是它们返回的对象被赋值给```__weak```指针后，前者仍然存在，而后者则被销毁了。如果再加入```@autorelease```块做点实验，可以发现```helloWorldString```指向的对象其实已被注册到autorelease pool中。
+
+对比内存管理原则，这就像是在MRC下，不以alloc/new/copy/mutableCopy开头的方法，会对返回的对象发送```autorelease```消息一样。而事实上，在ARC下，编译器会检查方法名是否以alloc/new/copy/mutableCopy开头，如果不是，则自动将返回的对象注册到autorelease pool中。
+
+更接近底层一点，其实Clang使用了一些标识来决定一个方法的返回值是否应该被持有。比如[Clang文档](http://clang.llvm.org/docs/AutomaticReferenceCounting.html)中有这样的说明：
+&gt;Methods in the alloc, copy, init, mutableCopy, and new [*families*](http://clang.llvm.org/docs/AutomaticReferenceCounting.html#arc-method-families) are implicitly marked ```__attribute__((ns_returns_retained))```. 
+
+&gt;alloc/copy/init/mutableCopy/new家族中的方法，会被隐式标记为```__attribute__((ns_returns_retained))```
+
+在一些特殊的情况下，程序员也可以手动给某些方法加上其他标记，来覆盖被编译器隐式加上的标记。
+
+-----
+
+###id *obj的传递
+
+&lt;br&gt;
+上面说到，编译器会检查方法名是否以alloc/new/copy/mutableCopy开头，来判断是否需要将返回的对象注册到autorelease pool中。
+
+函数之间如果想要传递一个对象，不仅可以通过返回值，也可以通过将一个id指针作为参数的方式。在cocoa框架中，```NSError```的对象经常通过这种方式来传递，比如```NSManagedObjectContext```中的：
+</code></pre>
+<ul>
+<li>(BOOL)save:(NSError **)error;</li>
+</ul>
+<pre><code>其实，这个```(NSError **)error```相当于```(NSError * __autoreleasing *)error```，编译器默认为其生成了```__autoreleasing```修饰符。
+
+编译器默认生成```__autoreleasing```修饰符的做法，也是在贯彻内存管理原则，即确保只有通过以alloc/new/copy/mutableCopy开头的方法返回的对象才能被持有。
+
+虽然当我们自己定义```id *obj```类型的参数时，也可以显式指定它的所有权修饰符为其他，并通过编译，但为了贯彻内存管理原则，还是应该将```id *obj```类型的参数的所有权修饰符指定为```__autoreleasing```。
+
+-------
+
+####参考
+[《Objective-C 高级编程》](https://book.douban.com/subject/24720270/)
+[Clang](http://clang.llvm.org/docs/AutomaticReferenceCounting.html)
+[Memory Management Policy](https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/MemoryMgmt/Articles/mmRules.html)
+[objc arc的简单探索](http://blog.sunnyxx.com/2014/03/15/objc_arc_secret/)
+
+------
+####2016.03.24更新
+
+&lt;br&gt;
+老板看了这篇后，问我，为什么在“方法名检查”中用了```initWithCString:encoding:```来创建```NSString```对象？
+
+哈哈，这是因为我试了别的几种创建```NSString```对象的方式后，发现实验结果和我预期的不符。
+
+所以我来解释一下为什么用下面几种方法创建```NSString```对象，会得到与预期不符的实验结果。
+
+1. literal
+
+    literal，就是指用```@&quot;xxx&quot;```的方式创建一个```NSString```对象。然而，literal的内存管理方式有些特别。
+官方文档明确指出了使用literal创建的```NSString```对象在整个程序的生命周期内都是不会被销毁的：
+
+   &gt;Objective-C string constant is created at compile time and exists throughout your program’s execution. The compiler makes such object constants unique on a per-module basis, and they’re never deallocated. 
+
+   所以如果用literal的方式来创建```NSString```对象，这样得到的```helloWorldString```和```newHelloWorldString```到输出这一步时都不会变成空。
+
+2. 使用```initWithString:```
+
+   既然literal没法达到预期实验效果，那用```initWithString:```方法应该能创建出比较正常的```NSString```对象了吧？
+把```helloWorldString```和```newHelloWorldString```两个方法中的语句都替换为：
+</code></pre>
+<p>return [[NSString alloc] initWithString:@&quot;HelloWorld&quot;];</p>
+<pre><code>然而运行一下发现，```newHelloWorldString```并没有像预期的一样被销毁。
+
+    这是什么原因呢？嗯。。如果换一种写法：
+</code></pre>
+<p>NSString *s1 = @&quot;Hello World&quot;;<br>
+NSString *s2 = [[NSString alloc] initWithString:s1];</p>
+<pre><code>然后运行到这里时输出```s1```和```s2```指向的地址，发现这两个指针竟然指向同一个地址。看来```initWithString:```方法中可能做了某些处理？
+
+3. 使用```stringWithFormat:```
+   
+   老板问我用```stringWithFormat:```为什么不能达到预期效果，虽然我当场有点懵逼，但是回头一想，这不是显然么。
+因为```stringWithFormat:```这个方法，不是以alloc/new/copy/mutableCopy开头的呀，所以它返回的对象已经被注册到了autorelease pool里呀。
+</code></pre>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/Xcode-zhong-he-symbols-you-guan-de-ji-ge-she-zhi/">
+              <h3 class="post-title">
+                下一篇：Xcode中和symbols有关的几个设置
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

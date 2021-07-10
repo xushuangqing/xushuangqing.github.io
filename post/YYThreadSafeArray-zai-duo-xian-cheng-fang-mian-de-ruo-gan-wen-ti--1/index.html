@@ -1,0 +1,247 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>YYThreadSafeArray在多线程方面的若干问题 | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">YYThreadSafeArray在多线程方面的若干问题</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2019-03-13</span>
+            
+          </div>
+          <div class="post-content">
+            <p>YYThreadSafeArray是YYKit中的一个工具类，旨在提供线程安全的数组。YYThreadSafeArray的原理是继承NSMutableArray的，并且对其中必要的方法加锁来保证线程安全。但是，虽然YYKit在开源界使用广泛，但是YYThreadSafeArray依然有一些多线程方面的问题。其中部分问题在我们的项目中暴露和修复。</p>
+<h2 id="问题1调用枚举方法导致死锁">问题1：调用枚举方法导致死锁</h2>
+<h3 id="调用方式">调用方式：</h3>
+<pre><code>YYThreadSafeArray *array = [[YYThreadSafeArray alloc] initWithObjects:@&quot;hello world&quot;, nil];
+[array enumerateObjectsUsingBlock:^(id  _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+    [array count];
+}];
+</code></pre>
+<h3 id="导致问题">导致问题：</h3>
+<p>死锁。<br>
+<img src="https://xushuangqing.github.io/post-images/YYThreadSafeArray-zai-duo-xian-cheng-fang-mian-de-ruo-gan-wen-ti--1/164542-80536b0d88d6fd5d.png" alt="" loading="lazy"></p>
+<h3 id="原因分析">原因分析：</h3>
+<p>YYThreadSafeArray使用加锁的方式保证线程安全。加的锁是信号量：dispatch_semaphore。</p>
+<pre><code>#define LOCK(...) dispatch_semaphore_wait(_lock, DISPATCH_TIME_FOREVER); \
+__VA_ARGS__; \
+dispatch_semaphore_signal(_lock);
+</code></pre>
+<p>dispatch_semaphore并不是可重入的。因此，遇到重入的情况，就会发生死锁问题。举的例子只是其中一个死锁场景。</p>
+<p>YY选择使用dispatch_semaphore的原因，可能是判断dispatch_semaphore的执行效率较高。可以参考YY对各种锁的效率测评：https://blog.ibireme.com/2016/01/16/spinlock_is_unsafe_in_ios/</p>
+<h3 id="修复方法">修复方法：</h3>
+<p>使用pthread_mutex替代dispatch_semaphore。pthread_mutex有参数可以设置为可重入。在YY测试的执行效率上，可重入的pthread_mutex是可重入锁中效率较高的一个。</p>
+<h2 id="问题2判等导致死锁">问题2：判等导致死锁</h2>
+<p>在使用pthread_mutex替代dispatch_semaphore的方式修复了可重入锁的问题后，我们发现YYThreadSafeArray在判等处的代码是有死锁隐患的。</p>
+<h3 id="调用方式-2">调用方式：</h3>
+<pre><code>YYThreadSafeArray *threadSafeArrayA = [[YYThreadSafeArray alloc] init];
+YYThreadSafeArray *threadSafeArrayB = [[YYThreadSafeArray alloc] init];
+for (int i = 0; i &lt; 1000000; i++) {
+    [threadSafeArrayA addObject:@(i)];
+    [threadSafeArrayB addObject:@(i)];
+}
+    
+for (int i = 0; i &lt; 10000; i++) {
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        [threadSafeArrayB isEqualToArray:threadSafeArrayA];
+    });
+    [threadSafeArrayA isEqualToArray:threadSafeArrayB];
+}
+</code></pre>
+<p>如果两个线程中，同时分别执行</p>
+<pre><code> [A isEqualToArray:B];
+</code></pre>
+<p>和</p>
+<pre><code> [B isEqualToArray:A];
+</code></pre>
+<p>则会有一定概率死锁。</p>
+<h3 id="原因分析-2">原因分析：</h3>
+<p>我们查看YYThreadSafeArray中isEqualToArray方法的源码：</p>
+<pre><code>- (BOOL)isEqualToArray:(NSArray *)otherArray {
+    if (otherArray == self) return YES;
+    if ([otherArray isKindOfClass:YYThreadSafeArray.class]) {
+        YYThreadSafeArray *other = (id)otherArray;
+        BOOL isEqual;
+        dispatch_semaphore_wait(_lock, DISPATCH_TIME_FOREVER);
+        dispatch_semaphore_wait(other-&gt;_lock, DISPATCH_TIME_FOREVER);
+        isEqual = [_arr isEqualToArray:other-&gt;_arr];
+        dispatch_semaphore_signal(other-&gt;_lock);
+        dispatch_semaphore_signal(_lock);
+        return isEqual;
+    }
+    return NO;
+}
+</code></pre>
+<p>在线程1中调用</p>
+<pre><code> [A isEqualToArray:B];
+</code></pre>
+<p>此时，执行完</p>
+<pre><code>dispatch_semaphore_wait(_lock, DISPATCH_TIME_FOREVER);
+</code></pre>
+<p>这行，A的_lock锁进入锁住状态。</p>
+<p>同时，线程2调用</p>
+<pre><code> [B isEqualToArray:A];
+</code></pre>
+<p>执行完</p>
+<pre><code>dispatch_semaphore_wait(_lock, DISPATCH_TIME_FOREVER);
+</code></pre>
+<p>这行，B的_lock锁也进入锁住状态。</p>
+<p>那么线程1在执行下一行</p>
+<pre><code>dispatch_semaphore_wait(other-&gt;_lock, DISPATCH_TIME_FOREVER);
+</code></pre>
+<p>时，由于<code>B -&gt;_lock</code>已经被锁住，线程1不得不阻塞在此，等待B的锁被解锁。<br>
+而同时，B也在执行同一行代码时，在等待A的锁被解锁。<br>
+这就造成了死锁的情形。</p>
+<p>代码类似的<code>isEqual:</code>方法也有一样的问题。</p>
+<h3 id="修复方法-2">修复方法：</h3>
+<p>为了修复这个场景，我们引入了一个新的全局的锁，将整个方法锁起来，防止两个线程同时进入<code>isEqualToArray:</code>方法中。</p>
+<h2 id="问题3for-in循环的线程不安全">问题3：for-in循环的线程不安全</h2>
+<p>YYThreadSafeArray在只用for-in循环时，是无法保证线程安全的。</p>
+<h3 id="调用方式-3">调用方式：</h3>
+<pre><code>YYThreadSafeArray *threadSafeArray = [[YYThreadSafeArray alloc] init];
+for (int i = 0; i &lt; 1000000; i++) {
+    [threadSafeArray addObject:@(i)];
+}
+dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+    for (int i = 0; i &lt; 100000; i++) {
+        [threadSafeArray removeLastObject];
+    }
+});
+for (id obj in threadSafeArray) {
+    (void)obj;
+}
+</code></pre>
+<p>此时大概率会抛出异常：</p>
+<pre><code>*** Terminating app due to uncaught exception 'NSGenericException', reason: '*** Collection &lt;YYThreadSafeArray: 0x60000165aa20&gt; was mutated while being enumerated.'
+</code></pre>
+<h3 id="原因分析-3">原因分析：</h3>
+<p>在执行for-in循环时，会调用NSArray的</p>
+<pre><code>- (NSUInteger)countByEnumeratingWithState:(NSFastEnumerationState *)state
+                                  objects:(id __unsafe_unretained[])stackbuf
+                                    count:(NSUInteger)len;
+</code></pre>
+<p>方法。</p>
+<p>for-in循环之所以有更高的效率，是因为在循环时，它并非每次都访问NSArray数组，而是直接将一段NSArray数组，当作一个C数组来访问，直接便利这个C数组。对于NSArray来说，<code>state.itemsPtr</code>字段将返回这个C数组的指针。</p>
+<p>但在这个方法中加锁，锁住的只是寻找这个C数组的过程，并不能锁住整个for-in循环过程。所以，当多线程进入时，会抛出<code>was mutated while being enumerated</code>异常。</p>
+<h3 id="修复方法-3">修复方法：</h3>
+<p>这个问题没有想到优雅的修复方法。有2种不怎么优雅的方式可选：</p>
+<ol>
+<li>让调用方用enumerateObjectsUsingBlock这种遍历方法替代for-in循环，但在效率上肯定有折损；</li>
+<li>将YYThreadSafeArray种的锁暴露出去，让业务方在for-in循环时自行加锁。</li>
+</ol>
+<p>但这两种方法都依赖于调用方以一个特定的姿势来调用。如果调用姿势无法保证，YYThreadSafeArray也无法保证线程安全了。</p>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/ru-he-fu-hao-hua-Objective-C-diao-yong-zhan/">
+              <h3 class="post-title">
+                下一篇：如何符号化Objective C调用栈
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

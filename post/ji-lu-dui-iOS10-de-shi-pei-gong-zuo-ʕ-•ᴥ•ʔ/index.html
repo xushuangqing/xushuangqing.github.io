@@ -1,0 +1,261 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>记录对iOS10的适配工作ʕ •ᴥ•ʔ | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">记录对iOS10的适配工作ʕ •ᴥ•ʔ</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2016-09-18</span>
+            
+          </div>
+          <div class="post-content">
+            <p>iOS10正式版开始推送，赶着ddl做的iOS10适配工作也算是完成了，这里记录下iOS10适配中做的工作。</p>
+<p>仅是适配，不包括利用iOS10新特性做的新功能。做的工作有这样几个方面：</p>
+<ul>
+<li>Swift转换</li>
+<li>Today extension UI适配</li>
+<li>entitlements文件增加aps</li>
+<li>info.plist增加权限字段</li>
+<li>UITableView生命周期适配</li>
+<li>pbxproj文件适配证书部分</li>
+<li>IDFA可被用户禁用</li>
+</ul>
+<p>现在依次来介绍一下</p>
+<hr>
+<h3 id="swift转换">Swift转换</h3>
+<br>
+使用Xcode8 beta打开项目后，Xcode8会提示转换项目中的Swift代码。
+<p>按照Xcode的提示，转换至Swift 2.3就ok了。转换过程中，Xcode会自动更新pbxproj中纪录的Swift版本。</p>
+<p>这部分比较顺利，没有遇到什么坑。</p>
+<hr>
+<h3 id="today-extension-ui适配">Today extension UI适配</h3>
+<br>
+iOS10对today extension做了一些调整，主要体现在：
+<ul>
+<li>视觉调整，背景色变浅，去除了左侧margin</li>
+<li>支持“展开”和“收起”操作，展开和收起两种状态分别有最高高度限制</li>
+</ul>
+<h5 id="视觉调整">视觉调整</h5>
+<br>
+用Xcode8构建的app，可以看到today extension的背景色，由深灰色变成了浅灰色，左侧的margin也取消了。
+<h5 id="支持展开和收起操作">支持展开和收起操作</h5>
+<br>
+iOS10中，today extension支持展开/收起操作，收起时视图高度固定，展开时视图高度可变。
+<p>iOS10中，<code>NCWidgetProviding</code>协议新增了一个回调：</p>
+<pre><code>// If implemented, called when the active display mode changes.
+// The widget may wish to change its preferredContentSize to better accommodate the new display mode.
+- (void)widgetActiveDisplayModeDidChange:(NCWidgetDisplayMode)activeDisplayMode withMaximumSize:(CGSize)maxSize NS_AVAILABLE_IOS(10_0);
+</code></pre>
+<p>用户点击展开/收起后，这个方法会调用。注释中建议在这个方法中设置today extension的<code>preferredContentSize</code>。</p>
+<p>展开和收起模式下高度的限制可以通过</p>
+<pre><code>- (CGSize)widgetMaximumSizeForDisplayMode:(NCWidgetDisplayMode)displayMode
+</code></pre>
+<p>方法获得。</p>
+<p>有人讨论说，收起模式下调整高度无效（ <a href="https://forums.developer.apple.com/thread/48930">How to resize the height of widget in iOS 10?</a> ）,个人理解<code>NCWidgetDisplayMode</code>的注释中，已经表示了收起模式下的视图高度是固定的：</p>
+<pre><code>typedef NS_ENUM(NSInteger, NCWidgetDisplayMode) {
+    NCWidgetDisplayModeCompact, // Fixed height
+    NCWidgetDisplayModeExpanded, // Variable height
+} NS_ENUM_AVAILABLE_IOS(10_0);
+</code></pre>
+<p>展开模式下，不同机型/横竖屏，视图的最高高度限制也都是不同的。比如iPhone SE下测试，竖屏最大高度为396，iPhone 6s下测试，竖屏最大高度为528。</p>
+<hr>
+<h3 id="entitlements文件增加aps">entitlements文件增加aps</h3>
+<br>
+升级到Xcode8后，发现构建的包，在注册remote notification的，获取device token的时候失败了，错误信息为：
+<pre><code>no valid 'aps-environment' 
+entitlement string found for application
+</code></pre>
+<p>原来在Xcode7中，push notifications开关只有一个步骤：将push notifications加入到app id。</p>
+<figure data-type="image" tabindex="1"><img src="https://xushuangqing.github.io/post-images/ji-lu-dui-iOS10-de-shi-pei-gong-zuo-%CA%95-%E2%80%A2%E1%B4%A5%E2%80%A2%CA%94/164542-e1810feb1fe8096e.png" alt="" loading="lazy"></figure>
+<p>但是Xcode8中，打开push notifications开关有两个步骤：<br>
+多了一步写entitlements文件的步骤</p>
+<figure data-type="image" tabindex="2"><img src="https://xushuangqing.github.io/post-images/ji-lu-dui-iOS10-de-shi-pei-gong-zuo-%CA%95-%E2%80%A2%E1%B4%A5%E2%80%A2%CA%94/164542-340434386a7e5116.png" alt="" loading="lazy"></figure>
+<p>所以，用Xcode8打开工程后，应该重新打开一次push notification开关，之后entitlements文件中会多出两行：</p>
+<pre><code>&lt;key&gt;aps-environment&lt;/key&gt;
+&lt;string&gt;development&lt;/string&gt;
+</code></pre>
+<p>有了这两行之后，才可以正常注册device token。</p>
+<p>但是为什么这个值是development呢？难道正式上线前不需要改为production么？</p>
+<p>神奇的是，如果用</p>
+<pre><code>codesign --display --entitlements :- ./myApp.app
+</code></pre>
+<p>命令，可以看到app文件内的entitlement。如果用production证书签名，可以看到：</p>
+<pre><code>&lt;key&gt;aps-environment&lt;/key&gt;
+&lt;string&gt;production&lt;/string&gt;
+</code></pre>
+<p>可能是苹果在签名过程中，会自动更新<code>aps-environment</code>字段？</p>
+<p>网上发现的一个关于这个问题的<a href="https://github.com/phonegap/phonegap-plugin-push/issues/1154">讨论</a><br>
+和苹果的一个reply<a href="http://www.openradar.me/28076333">Xcode 8 Beta: aps-environment entitlement is missing</a></p>
+<hr>
+<h3 id="infoplist增加权限字段">Info.plist增加权限字段</h3>
+<br>
+使用Xcode8构建的app，在使用相册等权限时会崩溃。错误信息为：
+<pre><code>This app has crashed because it attempted to access privacy-sensitive data without a usage description.  The app's Info.plist must contain an NSPhotoLibraryUsageDescription key with a string value explaining to the user how the app uses this data.
+</code></pre>
+<p><a href="https://developer.apple.com/library/content/documentation/General/Reference/InfoPlistKeyReference/Articles/CocoaKeys.html">官方文档</a>中解释：</p>
+<pre><code>Important: To protect user privacy, an iOS app linked on or after iOS 10.0, and which accesses the user’s photo library, must statically declare the intent to do so. Include the NSPhotoLibraryUsageDescription key in your app’s Info.plist file and provide a purpose string for this key. If your app attempts to access the user’s photo library without a corresponding purpose string, your app exits.
+
+必须在Info.plist文件中增加NSPhotoLibraryUsageDescription键，并且填入合适的描述文本
+</code></pre>
+<p>还有很多其他的权限，如相机等，也需要在Info.plist文件中声明，具体可参考官方文档。</p>
+<p>有一个坑就是，如果string的值为空，这行权限的声明就会无效，遇到的时候还是崩溃：</p>
+<pre><code>&lt;key&gt;NSPhotoLibraryUsageDescription&lt;/key&gt;
+&lt;string&gt;&lt;/string&gt;
+</code></pre>
+<hr>
+<h3 id="uitableview-uicollectionview生命周期适配">UITableView、UICollectionView生命周期适配</h3>
+<br>
+[这章WWDC](https://developer.apple.com/videos/play/wwdc2016/219/)介绍了```UITableView```和```UICollectionView```的生命周期在iOS10中发生了改变。
+<p>在iOS9及之前，一个<code>UICollectionViewCell</code>被重用的过程是这样的：</p>
+<ul>
+<li>一个cell即将出现的屏幕上</li>
+<li>prepareForReuse</li>
+<li>cellForItemAtIndexPath</li>
+<li>willDisplayCell</li>
+<li>……</li>
+<li>一个cell完全离开屏幕</li>
+<li>didEndDisplayCell</li>
+<li>进入reuse queue</li>
+</ul>
+<p>但在iOS10中，一个UICollectionViewCell被重用的过程变成了这样：</p>
+<ul>
+<li>一个cell还没出现在屏幕上</li>
+<li>prepareForReuse</li>
+<li>cellForItemAtIndexPath</li>
+<li>一个cell即将出现的屏幕上</li>
+<li>……</li>
+<li>一个cell完全离开屏幕</li>
+<li>didEndDisplayCell</li>
+<li>一段时间后再进入reuse queue</li>
+</ul>
+<p>所以，iOS10后，<code>cellForItemAtIndexPath</code>被调用时，并不表示这个cell即将要出现在了屏幕上。还是得老老实实使用<code>willDisplayCell</code>和<code>didEndDisplayCell</code>方法。</p>
+<hr>
+<h3 id="pbxproj文件适配证书部分">pbxproj文件适配证书部分</h3>
+<br>
+Xcode8支持自动管理配置文件，按照文档，只需要勾选Automatically manage signing，并配置Code Signing Identity为iOS Developer，Provisioning Profile为Automatic就可以了。
+<p>官方文档在这里：<br>
+<a href="https://developer.apple.com/library/content/qa/qa1814/_index.html">How do I configure my Xcode project to use automatic provisioning?</a></p>
+<hr>
+<h3 id="idfa可被用户禁用">IDFA可被用户禁用</h3>
+<br>
+iOS10中，用户可以在设置-隐私-广告-限制广告追踪中禁止app读取IDFA，这时app读取到的IDFA就是一串0。
+<p><a href="https://developer.apple.com/reference/adsupport/asidentifiermanager/1614151-advertisingidentifier">官方文档</a>中这样说：</p>
+<pre><code>In iOS 10.0 and later, the value of advertisingIdentifier is all zeroes when the user has limited ad tracking.
+</code></pre>
+<p>无法读取IDFA的问题，看来暂时难以解决，求支招(╥﹏╥)</p>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/yong-iOS10-UserNotifications-kuang-jia-lai-jie-shou-remote-notification/">
+              <h3 class="post-title">
+                下一篇：用iOS10 UserNotifications框架来接收remote notification
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

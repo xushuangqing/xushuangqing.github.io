@@ -1,0 +1,266 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>Objective C的哪些特性利用了运行时机制 | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">Objective C的哪些特性利用了运行时机制</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2016-06-27</span>
+            
+          </div>
+          <div class="post-content">
+            <p>这是我遇到的一道面试题。虽然当时回答得一般，但是我很喜欢这道题目，因为它可以考察出面试者对运行时机制理解的深度和广度，所以这里想试着重新回答一下。</p>
+<p>现在的回答可能还很浅薄，如果以后想到了什么能补充的地方也会更新这篇(￣▽￣)</p>
+<p>本文中关于runtime的源码参考自苹果开源的<a href="http://opensource.apple.com/tarballs/objc4/objc4-680.tar.gz">objc4-680</a></p>
+<hr>
+<h3 id="method-swizzling">Method Swizzling</h3>
+<br>
+在一些静态语言比如C语言中，调用一个函数后会跳到哪个地址执行哪些指令，是在编译链接的时候确定的。而在Objective-C中，向一个对象发送消息时，具体会执行哪个方法，则是运行时系统根据selector查找对应的IMP得到的。
+<p>所以通过交换两个selector对应的IMP，可以完成对执行的具体方法的调换。</p>
+<hr>
+<h3 id="associated-object">Associated Object</h3>
+<br>
+使用
+<pre><code>void objc_setAssociatedObject(id object, const void *key, id value, objc_AssociationPolicy policy);
+id objc_getAssociatedObject(id object, const void *key);
+void objc_removeAssociatedObjects(id object)
+</code></pre>
+<p>这三个方法，可以在运行时为一个对象建立一个关联对象。程序员可以为现有的类增添关联对象，起到类似于动态添加“实例变量”的作用。</p>
+<p>可以在苹果开源的runtime代码中找到这几个方法的实现。比如在<code>objc-references.mm</code>中可以找到<code>objc_setAssociatedObject</code>最终调用的方法：</p>
+<pre><code>void _object_set_associative_reference(id object, void *key, id value, uintptr_t policy) 
+</code></pre>
+<p>阅读这几个方法的实现，可以大概了解到关联对象的实现机制。它维护了一个全局的<code>AssociationsHashMap</code>对象。这是一个map对象，其中键为被关联对象的地址，值为一个指向<code>ObjectAssociationMap</code>对象的指针。而<code>ObjectAssociationMap</code>类派生自<code>std::map</code>，键为传入的“key”参数（是一个地址），值为一个指向<code>ObjcAssociation</code>对象的指针。最后，<code>ObjcAssociation</code>中的成员变量<code>_value</code>指的就是那个关联对象。</p>
+<figure data-type="image" tabindex="1"><img src="https://xushuangqing.github.io/post-images/Objective-C-de-na-xie-te-xing-li-yong-le-yun-xing-shi-ji-zhi/164542-ad1d306922a8dde2.png" alt="" loading="lazy"></figure>
+<hr>
+<h3 id="category">Category</h3>
+<br>
+在Objective-C中，因为一个类中有哪些方法是在运行时决定的，所以可以用category给任何类增加方法。
+<p>在<code>objc-runtime-new.mm</code>中，可以看到<code>methodizeClass</code>方法</p>
+<pre><code>/***********************************************************************
+* methodizeClass
+* Fixes up cls's method list, protocol list, and property list.
+* Attaches any outstanding categories.
+* Locking: runtimeLock must be held by the caller
+**********************************************************************/
+static void methodizeClass(Class cls)
+{
+
+......
+
+    // Install methods and properties that the class implements itself.
+    method_list_t *list = ro-&gt;baseMethods();
+    if (list) {
+        prepareMethodLists(cls, &amp;list, 1, YES, isBundleClass(cls));
+        rw-&gt;methods.attachLists(&amp;list, 1);
+    }
+
+    property_list_t *proplist = ro-&gt;baseProperties;
+    if (proplist) {
+        rw-&gt;properties.attachLists(&amp;proplist, 1);
+    }
+
+    protocol_list_t *protolist = ro-&gt;baseProtocols;
+    if (protolist) {
+        rw-&gt;protocols.attachLists(&amp;protolist, 1);
+    }
+
+    // Root classes get bonus method implementations if they don't have 
+    // them already. These apply before category replacements.
+    if (cls-&gt;isRootMetaclass()) {
+        // root metaclass
+        addMethod(cls, SEL_initialize, (IMP)&amp;objc_noop_imp, &quot;&quot;, NO);
+    }
+
+    // Attach categories.
+    category_list *cats = unattachedCategoriesForClass(cls, true /*realizing*/);
+    attachCategories(cls, cats, false /*don't flush caches*/);
+
+........
+
+}
+</code></pre>
+<p>根据注释，这个方法负责将一个类的方法列表、协议列表和属性列表整理好。在这个类的实现中，我们可以看到，相比于整理类自身的方法列表、协议列表和属性列表，将category中的内容关联到对应的类上，是之后做的事情。</p>
+<p>查看<code>attachCategories</code>的方法实现，其中，category中的方法列表是这样关联到对应的类中的：</p>
+<pre><code>rw-&gt;methods.attachLists(mlists, mcount);
+</code></pre>
+<p>在category将方法列表关联到类的方法列表的过程中，是不会判断selector是否重名的。如果类A中已经定义了方法<code>demoMethod</code>，那么在A的category中定义重名的<code>demoMethod</code>，会导致加载完成后，类A的方法列表中有两个名为<code>demoMethod</code>的方法。可以做个小实验验证：</p>
+<pre><code>unsigned int count = 0;
+Method *methodList = class_copyMethodList([A class], &amp;count);
+Method *methodHeader = methodList;
+while (count--) {
+    Method method = *methodHeader;
+    SEL selector = method_getName(method);
+    NSLog(@&quot;sel: %@&quot;, NSStringFromSelector(selector));
+    methodHeader++;
+}
+free(methodList);
+</code></pre>
+<p>这段代码的输出：</p>
+<pre><code>2016-06-26 18:31:04.251 XSQCategoryDemo[3410:5607532] sel: demoMethod
+2016-06-26 18:31:04.252 XSQCategoryDemo[3410:5607532] sel: demoMethod
+</code></pre>
+<p>即表示，类A的方法列表中有两个名为<code>demoMethod</code>的方法。</p>
+<hr>
+<h3 id="kvo">KVO</h3>
+<br>
+KVO的实现原理是isa-swizzling
+<p><a href="https://developer.apple.com/library/ios/documentation/Cocoa/Conceptual/KeyValueObserving/Articles/KVOImplementation.html">官方文档</a>中解释了：当一个观察者被注册到一个对象上的时候，这个对象的isa指针会被更改，指向一个中间类而非真正的类。</p>
+<p>如果做实验验证一下：</p>
+<pre><code>A *a = [[A alloc] init];
+NSLog(@&quot;%@&quot;, object_getClass(a));
+[a addObserver:someObserver forKeyPath:@&quot;someKeyPath&quot; options:0 context:nil];
+NSLog(@&quot;%@&quot;, object_getClass(a));
+</code></pre>
+<p>这一小段代码的输出是：</p>
+<pre><code>2016-06-25 23:56:49.381 XSQKVODemo[88055:5252219] A
+2016-06-25 23:56:52.161 XSQKVODemo[88055:5252219] NSKVONotifying_A
+</code></pre>
+<p>可以看出，在注册了观察者之后，对象指向的类发生了改变。</p>
+<hr>
+<h3 id="kvc">KVC</h3>
+<br>
+在Foundation的```NSKeyValueCoding.h```中，几个KVO方法都用详细的注释介绍了它的搜索策略。比如
+```
+- (nullable id)valueForKey:(NSString *)key;
+```
+方法是这样执行的：
+<ol>
+<li>搜索消息接收者所在类的accessor方法，依次寻找名字能匹配<br>
+<code>-get&lt;Key&gt;</code>、<code>-&lt;key&gt;</code>或者<code>-is&lt;Key&gt;</code>的方法，如果找到则调用；</li>
+<li>搜索消息接收者所在类的方法，如果有能匹配<code>NSOrderedSet</code>的方法，则会返回一个代理对象，这个代理对象可以接收所有<code>NSOrderedSet</code>对象可以接收的消息；</li>
+<li>搜索消息接收者所在类的方法，如果能匹配<code>NSArray</code>的方法，则返回一个可以接收所有<code>NSArray</code>对象可以接收的消息的代理对象；</li>
+<li>搜索消息接收者所在类的方法，如果能匹配<code>NSSet</code>的方法，则返回一个可以接收所有<code>NSSet</code>对象可以接收的消息的代理对象；</li>
+<li>如果消息接收者所在的类的<code>+accessInstanceVariablesDirectly</code>方法返回的是<code>YES</code>，就依次寻找名字能匹配<br>
+<code>_&lt;key&gt;</code>、<code>_is&lt;Key&gt;</code>、<code>&lt;key&gt;</code>或者<code>is&lt;Key&gt;</code>的实例变量；</li>
+<li>最后，调用<code>-valueForUndefinedKey:</code>然后返回结果。</li>
+</ol>
+<p>虽然没找到明确的文档说KVC利用了运行时机制，但类似这样对方法名、对实例变量的搜索，没有运行时系统的支持应该是无法做到的。</p>
+<p>其实如果在Xcode中设置一个符号断点<code>class_getInstanceMethod</code>，也可以调试到这个方法被KVC的一些方法调用了：</p>
+<figure data-type="image" tabindex="2"><img src="https://xushuangqing.github.io/post-images/Objective-C-de-na-xie-te-xing-li-yong-le-yun-xing-shi-ji-zhi/164542-a55b38477dc13835.png" alt="" loading="lazy"></figure>
+<hr>
+<h4 id="参考">参考</h4>
+<p><a href="http://opensource.apple.com/tarballs/objc4/objc4-680.tar.gz">objc4-680</a><br>
+<a href="https://developer.apple.com/library/mac/documentation/Cocoa/Reference/ObjCRuntimeRef/index.html#//apple_ref/c/func/method_getName">Objective-C Runtime Reference</a><br>
+<a href="https://developer.apple.com/library/ios/documentation/Cocoa/Conceptual/KeyValueObserving/Articles/KVOImplementation.html">Key-Value Observing Implementation Details</a><br>
+<a href="http://chun.tips/blog/2014/11/06/bao-gen-wen-di-objective%5Bnil%5Dc-runtime(3)%5Bnil%5D-xiao-xi-he-category/">刨根问底Objective－C Runtime（3）－ 消息 和 Category</a><br>
+<a href="http://blog.sunnyxx.com/2014/08/30/objc-pre-main/">iOS 程序 main 函数之前发生了什么</a><br>
+<a href="http://blog.leichunfeng.com/blog/2015/06/26/objective-c-associated-objects-implementation-principle/">Objective-C Associated Objects 的实现原理</a><br>
+<a href="http://blog.sunnyxx.com/2014/03/05/objc_category_secret/">objc category的秘密</a><br>
+<a href="https://www.objc.io/issues/7-foundation/key-value-coding-and-observing/">Key-Value Coding and Observing</a><br>
+<a href="http://tech.meituan.com/DiveIntoCategory.html">深入理解Objective-C：Category</a></p>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/yi-ge-method-swizzling-shi-yan/">
+              <h3 class="post-title">
+                下一篇：一个method swizzling实验
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

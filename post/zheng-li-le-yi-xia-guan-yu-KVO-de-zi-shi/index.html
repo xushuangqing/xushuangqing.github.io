@@ -1,0 +1,223 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>整理了一下关于KVO的姿势 | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">整理了一下关于KVO的姿势</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2015-07-15</span>
+            
+          </div>
+          <div class="post-content">
+            <p>其实是第一次看<a href="https://developer.apple.com/library/ios/documentation/Cocoa/Conceptual/KeyValueObserving/KeyValueObserving.html#//apple_ref/doc/uid/10000177-BCICJDHA">Key-Value Observing Programming Guide</a>和<a href="https://developer.apple.com/library/ios/documentation/Cocoa/Conceptual/KeyValueCoding/Articles/KeyValueCoding.html#//apple_ref/doc/uid/10000107i">Key-Value Coding Programming Guide</a>。虽然以前也写过一点KVO的代码，但是当时为了快点赶晚项目，随便看了看示例代码就贴到工程里了。是一个不好的习惯呢。所以还是把一些细节弄弄清楚，把姿势整理一下吧^ ^</p>
+<hr>
+<p>###设立一个观察者</p>
+<br>
+KVO（Key-value observing）提供了一种机制，当某个对象的某个特定的property被改动时，它能够允许别的对象接到这个通知。
+<p>实现KVO的前提条件就是，这个类和它的这个property是KVC compliant的。对于这个类来说，<code>valueForKey:</code>和<code>setValue:forKey:</code>这两个方法被合理的实现（NSObject对这两个方法有了默认的实现）；如果这个property是一个attribute或者to-one relationship的话，要满足以下几个条件的至少一个（其中，key表示这个property对应的key）：</p>
+<ol>
+<li>这个类以key为名，声明了一个property；</li>
+<li>这个类实现了以key为名的accessor方法；</li>
+<li>这个类以key或者_key为名，声明了一个实例变量。</li>
+</ol>
+<p>如果这个property是一个to-many relationship，情况会更复杂，还是把<a href="https://developer.apple.com/library/ios/documentation/Cocoa/Conceptual/KeyValueCoding/Articles/Compliant.html#//apple_ref/doc/uid/20002172-BAJEAIEE">官方文档</a>搬出来吧。</p>
+<p>对一个property设定一个观察者需要这样几个步骤：</p>
+<p><strong>一. 使用<code>addObserver:forKeyPath:options:context:</code>方法，对需要观察的property注册一个观察者</strong></p>
+<p>这时，观察者对象和被观察的对象之间会建立联系，这种联系是针对于对象的，而不是针对于类的。</p>
+<p>其中可以指定options参数：</p>
+<ul>
+<li><code>NSKeyValueObservingOptionNew</code>：当options中包括了这个参数的时候，观察者收到的change参数中就会包含<code>NSKeyValueChangeNewKey</code>和它对应的值，也就是说，观察者可以得知这个property在被改变之后的新值。</li>
+<li><code>NSKeyValueObservingOptionOld</code>：和<code>NSKeyValueObservingOptionNew</code>的意思类似，当包含了这个参数的时候，观察者收到的change参数中就会包含<code>NSKeyValueChangeOldKey</code>和它对应的值。</li>
+<li><code>NSKeyValueObservingOptionInitial</code>：当包含这个参数的时候，在addObserver的这个过程中，就会有一个notification被发送到观察者那里，反之则没有。</li>
+<li><code>NSKeyValueObservingOptionPrior</code>：当包含这个参数的时候，在被观察的property的值改变前和改变后，系统各会给观察者发送一个change notification；在property的值改变之前发送的change notification中，change参数会包含<code>NSKeyValueChangeNotificationIsPriorKey</code>并且值为<code>@YES</code>，但不会包含<code>NSKeyValueChangeNewKey</code>和它对应的值。</li>
+</ul>
+<p>可以指定多个<code>NSKeyValueObservingOptions</code>，将他们用“或”连接后，作为options参数。</p>
+<p>可以将任意对象作为context参数，它会和观察者实现的<code>observeValueForKeyPath:ofObject:change:context:</code>方法中的context参数指向同一个对象。</p>
+<p><strong>二. 观察者必须实现<code>observeValueForKeyPath:ofObject:change:context:</code>方法，并定义观察者应该如何响应change notification</strong></p>
+<p>在这个方法中，change参数会传入一个NSDictionary，代表了与property的值变化相关的信息。其中可能会有这样几个键值对：</p>
+<ul>
+<li>
+<p><code>NSKeyValueChangeKindKey</code>：这是change中永远会包含的键值对，它的值时一个NSNumber对象，具体的数值有<code>NSKeyValueChangeSetting</code>、<code>NSKeyValueChangeInsertion</code>、<code>NSKeyValueChangeRemoval</code>、<code>NSKeyValueChangeReplacement</code>这几个，其中后三个是针对于to-many relationship的。</p>
+</li>
+<li>
+<p><code>NSKeyValueChangeNewKey</code>：只有当addObserver的时候在optional参数中加入<code>NSKeyValueObservingOptionNew</code>，这个键值对才会被change参数包含；它表示这个property改变后的新值。</p>
+</li>
+<li>
+<p><code>NSKeyValueChangeNewOld</code>：只有当addObserver的时候在optional参数中加入<code>NSKeyValueObservingOptionOld</code>，这个键值对才会被change参数包含；它表示这个property改变前的值。</p>
+</li>
+<li>
+<p><code>NSKeyValueChangeIndexesKey</code>：当被观察的property是一个ordered to-many relationship时，这个键值对才会被change参数包含；它的值是一个NSIndexSet对象。</p>
+</li>
+<li>
+<p><code>NSKeyValueChangeNotificationIsPriorKey</code>：只有当addObserver的时候在optional参数中加入<code>NSKeyValueObservingOptionPrior</code>，这个键值对才会被change参数包含；它的值是<code>@YES</code>。</p>
+</li>
+</ul>
+<p><strong>三. 当被观察的property的值发生变化的时候，或者它依赖的某一个key的值发生变化的时候，<code>observeValueForKeyPath:ofObject:change:context:</code>方法会自动被调用</strong></p>
+<p>这里的改变被观察的property的值，指的应该是这样几种方式中的一种：</p>
+<ol>
+<li>调用key-value compliant的accessor方法；</li>
+<li>使用key-value coding方法，如<code>setValue:forKey:</code>、<code>insertValue:inPropertyWithKey:</code>；</li>
+<li>使用<code>mutableArrayValueForKey:</code>取得一个代理对象，并操作这个代理对象。</li>
+</ol>
+<p>所以如果仅仅是改变了某个property所生成的instance variable的值，自动的change notification是不会发送的。</p>
+<p><strong>四. 当不再需要这个观察者的时候，需要调用<code>removeObserver:forKeyPath:</code>或者<code>removeObserver:forKeyPath:context:</code>方法，移除这个观察者</strong></p>
+<p>应该尽量使用<code>removeObserver:forKeyPath:context:</code>方法，因为如果当同样的observer和同样的key path被多次注册，但是每次注册使用的是不同的context，这时如果使用<code>removeObserver:forKeyPath:</code>方法，它就需要猜测到底移除哪一个观察者，当然这很可能猜错。</p>
+<p>那些在<code>addObserver:forKeyPath:options:context:</code>中指定的对象，必须在deallocate之前被移除掉。</p>
+<hr>
+<p>###手动发送change notification</p>
+<br>
+按照上面说的方法，为某个property设立一个观察者，这个观察者就会收到系统自动发送的change notification。然而，第三方程序员也可以手动发送change notification。手动发送change notification可以更自由的控制通知发送的逻辑。
+<p>如果一个类想要实现手动的change notification发送，则必须重写NSObject实现的<code>automaticallyNotifiesObserversForKey:</code>方法，并对需要实现手动发送的key返回<code>NO</code>，其余则调用super。</p>
+<p>官方示例代码：</p>
+<pre><code>+ (BOOL)automaticallyNotifiesObserversForKey:(NSString *)theKey {
+    BOOL automatic = NO;
+    if ([theKey isEqualToString:@&quot;openingBalance&quot;]) {
+        automatic = NO;
+    }
+    else {
+        automatic = [super automaticallyNotifiesObserversForKey:theKey];
+    }
+    return automatic;
+}
+</code></pre>
+<p>然后在property的值改变之前调用<code>willChangeValueForKey:</code>，在值改变之后调用<code>didChangeValueForKey:</code>。当然，在什么样的情况下才调用这两个方法，是由第三方程序的逻辑决定的。</p>
+<p>如果一个操作造成了多个key的值的改变，则<code>willChangeValueForKey:</code>和<code>didChangeValueForKey:</code>必须嵌套着调用。</p>
+<p>官方示例代码：</p>
+<pre><code>- (void)setOpeningBalance:(double)theBalance {
+    [self willChangeValueForKey:@&quot;openingBalance&quot;];
+    [self willChangeValueForKey:@&quot;itemChanged&quot;];
+    _openingBalance = theBalance;
+    _itemChanged = _itemChanged+1;
+    [self didChangeValueForKey:@&quot;itemChanged&quot;];
+    [self didChangeValueForKey:@&quot;openingBalance&quot;];
+}
+</code></pre>
+<p><code>willChangeValueForKey:</code>和<code>didChangeValueForKey:</code>调用时都会调用<code>valueForKey:</code>，并把得到的结果分别当成old value和new value，以告知观察者。</p>
+<p>做了个小实验，发现在自动发送change notification的情况下，<code>willChangeValueForKey:</code>和<code>didChangeValueForKey:</code>也会被调用，看来系统也是通过这两个方法来发送通知的。</p>
+<p>如果手动发送change notification的property是ordered to-many relationship，则不仅要指定被改变的key，还要指定改变的类型和index。类型用<code>NSKeyValueChange</code>来表示。</p>
+<hr>
+<p>###注册dependent keys</p>
+<br>
+对于to-one relationship的property，重写```keyPathsForValuesAffectingValueForKey:```或者```keyPathsForValuesAffecting<Key>```方法可以定义这个key所依赖的一系列key。但是这个方法仅限于to-one relationship的property。
+<p>官方示例代码：</p>
+<pre><code>+ (NSSet *)keyPathsForValuesAffectingFullName {
+    return [NSSet setWithObjects:@&quot;lastName&quot;, @&quot;firstName&quot;, nil];
+}
+</code></pre>
+<p>而对于to-many relationship，要么手动观察每一个依赖的key，要么利用Core Data来完成这个任务。</p>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/xie-gei-lao-ban-kan-de-iOS9-de-ji-ge-xin-te-xing/">
+              <h3 class="post-title">
+                下一篇：写给老板看的iOS9的几个新特性
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

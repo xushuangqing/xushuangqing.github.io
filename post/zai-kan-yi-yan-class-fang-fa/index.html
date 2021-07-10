@@ -1,0 +1,209 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>再看一眼class方法 | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">再看一眼class方法</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2016-07-26</span>
+            
+          </div>
+          <div class="post-content">
+            <h3 id="来做几道面试题">来做几道面试题</h3>
+<br>
+第一题：
+>```
+MyObject *myObject = [[MyObject alloc] init];
+Class clazz1 = [myObject class];
+```
+请问```clazz1```指的是？
+<blockquote>
+<p>A. MyObject类<br>
+B. MyObject的元类</p>
+</blockquote>
+<p>第二题：</p>
+<blockquote>
+<pre><code></code></pre>
+</blockquote>
+<p>Class clazz2 = [MyObject class];</p>
+<pre><code>请问```clazz2```指的是？
+
+&gt;A. MyObject类
+B. MyObject的元类
+
+我当时的回答：
+第一题：我猜class方法肯定是获取了对象的isa指针，所以选择了A。
+第二题：我猜class方法肯定是获取了对象的isa指针，所以选择了B。
+
+然后面试官说：那你平时用```isKindOfClass:```这个方法的时候，传的参数都是什么样的呢？
+
+我一想，诶，平时用```isKindOfClass:```的时候，我一般都这样写：
+</code></pre>
+<p>[myObject isKindOfClass:[MyObject class]];</p>
+<pre><code>
+如果第二题的答案是B的话，用这种方式来判断```myObject```的类型，肯定得到的是错误的答案。
+
+???懵逼中……
+
+---
+
+
+### 解答
+
+&lt;br&gt;
+查看了一下```NSObject```的头文件，其实可以看到，```NSObject```分别有
+
+</code></pre>
+<ul>
+<li>(Class)class;</li>
+</ul>
+<pre><code>和
+
+</code></pre>
+<ul>
+<li>(Class)class;</li>
+</ul>
+<pre><code>
+两个class方法，分别为实例方法和类方法。
+
+这两个方法都是怎么实现的呢？其实通过开源的runtime源码可以看到这两个方法的具体实现：
+
+</code></pre>
+<ul>
+<li>(Class)class {<br>
+return self;<br>
+}</li>
+</ul>
+<ul>
+<li>(Class)class {<br>
+return object_getClass(self);<br>
+}</li>
+</ul>
+<pre><code>
+可以看到，```+class```方法直接返回类自身，而```-class```方法返回isa指针指向的对象，也就是这个对象所对应的类。
+
+所以这两道题都应该选择A。
+
+(╥﹏╥)
+
+---
+
+#### 参考
+[objc4-680](http://opensource.apple.com/tarballs/objc4/objc4-680.tar.gz)
+</code></pre>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/weak-shi-zen-me-shi-xian-de/">
+              <h3 class="post-title">
+                下一篇：weak是怎么实现的
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

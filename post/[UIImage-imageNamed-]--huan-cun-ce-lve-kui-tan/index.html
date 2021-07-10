@@ -1,0 +1,211 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>[UIImage imageNamed] 缓存策略窥探 | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">[UIImage imageNamed] 缓存策略窥探</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2020-03-30</span>
+            
+          </div>
+          <div class="post-content">
+            <p>都知道 [UIImage imageNamed:] 有一个缓存，但是试想，如果我们要对沙盒里的图片也做一个缓存，这个缓存应该怎么设计，似乎不是那么容易解答的问题。这么一想，[UIImage imageNamed:] 到底是如何设计这个缓存的，倒是一个可以探究的问题。</p>
+<p>在探究之前，先试想一下，如果是我来设计 [UIImage imageNamed:] 的缓存，需要考虑哪些点？<br>
+我能想到的有这样几点：</p>
+<ol>
+<li>[UIImage imageNamed:] 大部分情况下都是在主线程调用的，那么高效的磁盘 IO 很关键，并且需要尽可能减少 IO 的次数，防止卡顿；</li>
+<li>图片最终显示前需要解码成 Bitmap，缓存图片压缩后的 Data 更好，还是缓存解码后的 Bitmap 更好，还是都缓存下来？显然 Bitmap 比对应的 Data 大几倍，如果选择缓存 Bitmap，那么可以缓存的图就更少，可能导致触发更多 IO；而如果选择缓存 Data，那么解码的开销便会增大。</li>
+<li>图片缓存应该在什么场景下清理？memory warning 时显然需要清理，那退后台需要清理么？需要设置缓存的最大值么？</li>
+</ol>
+<p>基于这些想法，在窥探 [UIImage imageNamed:] 真正的缓存策略时，我也带上了这样几个问题：</p>
+<ol>
+<li>图片解码发生的时机是什么？</li>
+<li>磁盘 IO 发生的时机是什么？</li>
+<li>缓存的内容是什么？</li>
+<li>清理缓存时机是什么？</li>
+</ol>
+<p>这篇文章就是对这几个问题的探索。</p>
+<h2 id="问题一图片解码发生的时机是什么">问题一：图片解码发生的时机是什么？</h2>
+<p>一句话回答：在 UIImage 显示到屏幕上时。</p>
+<p><a href="https://dreampiggy.com/2019/01/18/%E4%B8%BB%E6%B5%81%E5%9B%BE%E7%89%87%E5%8A%A0%E8%BD%BD%E5%BA%93%E6%89%80%E4%BD%BF%E7%94%A8%E7%9A%84%E9%A2%84%E8%A7%A3%E7%A0%81%E7%A9%B6%E7%AB%9F%E5%B9%B2%E4%BA%86%E4%BB%80%E4%B9%88/#more">同事的博客</a>里对解码的时机有比较详细的介绍。总结下来就是，除了 Force Decode，只有当 UIImage 显示在屏幕上时，解码操作才会被触发。</p>
+<p>通过设计一些实验，观察 app 内存水位的变化，也能快速验证这个结论。</p>
+<p>但是，能预想到，后续的很多分析会和这个解码时机有较强的关联。如果能知道到底那个函数代表了解码操作，那后续的验证也会有力很多。<br>
+这里我能想到的窥探方法，是使用 Instruments 的 Time Profile 功能。可以想象，解码一张大图一定是一个比较耗时的操作，很可能能被 Time Profiler 捕捉到。于是设计 Demo，果然在 Time Profiler 中发现了一个调用栈：<br>
+<img src="https://xushuangqing.github.io/post-images/%5BUIImage-imageNamed-%5D--huan-cun-ce-lve-kui-tan/164542-2e6babb82708260a.png" alt="" loading="lazy"></p>
+<p>用符号断点也可以验证，只有当即将有 UIImage 展示到屏幕上时，这个调用栈才会触发。因此假设，CUIUncompressDeepmap2ImageData 是解码（至少是我的 Asset Catalog 中的那张图解码）会走到的函数。</p>
+<p>之后我们可以用符号断点 CUIUncompressDeepmap2ImageData 是否触发来验证一些缓存策略。</p>
+<h2 id="问题二磁盘-io-发生的时机是什么">问题二：磁盘 IO 发生的时机是什么？</h2>
+<p>一句话回答：第一次读取某个 Assets.car 时，会有 open 和 read 操作（推测是读取索引），但真正读图的时机，是解压的时机，也就是 UIImage 展示到屏幕上时。</p>
+<p>使用 Instruments 的 File Activity，可以窥探 UIImage imageNamed: 是如何处理 IO 的，可以很容易地找到什么时间、什么调用栈读取了 Assets.car。<br>
+<img src="https://xushuangqing.github.io/post-images/%5BUIImage-imageNamed-%5D--huan-cun-ce-lve-kui-tan/164542-82ba845909955367.png" alt="" loading="lazy"></p>
+<p>结合符号断点也容易验证，第一次调用 [UIImage imageNamed:]，会触发 open 和 read 的系统调用。但之后再次从同一个 Assets.car 中获取 UIImage，open 和 read 就不再被调用了。<br>
+<img src="https://xushuangqing.github.io/post-images/%5BUIImage-imageNamed-%5D--huan-cun-ce-lve-kui-tan/164542-b79efaf7bee70379.png" alt="" loading="lazy"><br>
+<img src="https://xushuangqing.github.io/post-images/%5BUIImage-imageNamed-%5D--huan-cun-ce-lve-kui-tan/164542-70c5e74b4b6ed9bb.png" alt="" loading="lazy"></p>
+<p>从内存占用和设计的合理性上看，这个 read 操作并不是一次性把 Assets.car 的内容都读到了内存中。结合 File Activity 中，大部分读取 Assets.car 的 Operation 是 Page In，说明真正读取图片数据，用的是内存映射的方式。</p>
+<p>那么发生 Page In 的时机又是什么时候呢？是调用 [UIImage imageNamed:] 的时候，还是图片展示到屏幕上的时候呢？通过实验和堆栈可以推测，至少大部分的 Page In 的时机，是图片展示到屏幕上，也就是解码的时机。<br>
+<img src="https://xushuangqing.github.io/post-images/%5BUIImage-imageNamed-%5D--huan-cun-ce-lve-kui-tan/164542-79a9feeb36c8f2ca.png" alt="" loading="lazy"></p>
+<p>而且 Page In 时的堆栈也是 CUIUncompressDeepmap2ImageData。说明解码时，是一边从磁盘中 Page In 一边解码的。</p>
+<h2 id="问题三缓存的内容是什么">问题三：缓存的内容是什么？</h2>
+<p>一句话回答：缓存了 CGImage（如果已经解码，相当于缓存了 Bitmap），图片的 Data 通过内存映射也达到了缓存的目的。</p>
+<p>首先我们可以用 Xcode Memory Graph 来窥探，CGImage 对象是被什么持有的。<br>
+这时 Demo 中的图像已经不再展示在屏幕，已知的强持有也释放了，但 CGImage 对象依然存在内存中。这里能看到一条持有它的链条：<br>
+<img src="https://xushuangqing.github.io/post-images/%5BUIImage-imageNamed-%5D--huan-cun-ce-lve-kui-tan/164542-4d6feab02a9fd4ca.png" alt="" loading="lazy"></p>
+<p>最直接的是，CGImage 对象被 CUIStructuredThemeStore-&gt;_cache 持有着。<br>
+CUIStructuredThemeStore-&gt;_cache 是一个字典，用 debugger 打印它的样例内容：</p>
+<pre><code>po ((CUIStructuredThemeStore *)0x6000021f8c80)-&gt;_cache
+{
+    &quot;0{0-0-3-0-0-0-0-0-0-0-0-0-0-0-0-0-8019-55-b5-0-0&quot; = &quot;&lt;_CUIThemePixelRendition: 0x7ff18461cae0&gt; -- Rendition name: my_image_375x640_@3x.png&quot;;
+}
+</code></pre>
+<p>怀疑这就是 imageNamed: 的缓存。</p>
+<p>通过 <a href="https://developer.limneos.net/?ios=11.1.2&amp;framework=CoreUI.framework&amp;header=CUIStructuredThemeStore.h">CUIStructuredThemeStore 的头文件</a> 猜测和验证，CUIStructuredThemeStore 有一个</p>
+<pre><code>NSCache* _namedRenditionKeyCache;
+</code></pre>
+<p>其中 key 是 Image Set 的名字，value 是一个 struct renditionkeytoken，这个 renditionkeytoken 可以通过 keySignatureForKey: 转换成 key signature（一个 NSString），即 _cache 字典的 key。</p>
+<p>所以如果简化理解一下，图片的缓存是一个 NSDictionary，可以根据 Asset Catalog 中 Image Set 的名字，找到缓存的 CGImage 对象。</p>
+<p>啊对了，Memory Graph 里，CUIStructuredThemeStore 还被一个 MapTable 持有，实验了一下，一个 MapTable 中的元素，对应了一个 Assets.car。也就是说如果 App 中有多个 Assets.car，它们的缓存是隔离的。</p>
+<p>那图片的 Data 有没有缓存呢？由于 Data 使用的是内存映射的方式，重复读取并不会发生多次 Page In，只有当内存紧张时，这块映射的内存才会被 Page Out，因此相当于一个天然的缓存。</p>
+<h2 id="问题四清理缓存的时机是什么">问题四：清理缓存的时机是什么？</h2>
+<p>这里的“缓存”，仅讨论 CGImage 的缓存。<br>
+一句话回答：至少退后台、memory warning 会触发清空，但猜测缓存大小没有限制。</p>
+<p>从 <a href="https://developer.limneos.net/?ios=11.1.2&amp;framework=CoreUI.framework&amp;header=CUIStructuredThemeStore.h">CUIStructuredThemeStore 的头文件</a> 中，发现 CUIStructuredThemeStore 有个 clearRenditionCache 方法，看起来是用于清空缓存的。</p>
+<p>符号断点验证，在 app 退后台、memory warning 时，clearRenditionCache 会触发，CUIStructuredThemeStore-&gt;_cache 也会被清空。</p>
+<p><img src="https://xushuangqing.github.io/post-images/%5BUIImage-imageNamed-%5D--huan-cun-ce-lve-kui-tan/164542-50b5513b6df379e0.png" alt="" loading="lazy"><br>
+<img src="https://xushuangqing.github.io/post-images/%5BUIImage-imageNamed-%5D--huan-cun-ce-lve-kui-tan/164542-c598246c42280dc0.png" alt="" loading="lazy"></p>
+<p>缓存清理后，下次创建 UIImage 并展示到屏幕上时，解码的 CUIUncompressDeepmap2ImageData 也确实被调用了。</p>
+<p>那缓存的大小是否有限制呢？我猜测是没有的。<br>
+通过不断读取大图，我制造了缓存高达 600+MB 且还能继续上升的场景。结合缓存使用的 NSDictionary 而不是 NSCache，猜测在 memory warning 之前，缓存是可以持续增长的。</p>
+<h2 id="总结">总结</h2>
+<p>一句话总结一下开头的四个问题：</p>
+<p>问题一：图片解码发生的时机是什么？<br>
+在 UIImage 显示到屏幕上时。</p>
+<p>问题二：磁盘 IO 发生的时机是什么？<br>
+第一次读取某个 Assets.car 时，会有 open 和 read 操作（推测是读取索引），但真正读图的时机，是解压的时机，也就是 UIImage 展示到屏幕上时，利用的是内存映射。</p>
+<p>问题三：缓存的内容是什么？<br>
+缓存了 CGImage（如果已经解码，相当于缓存了 Bitmap），图片的 Data 通过内存映射也达到了缓存的目的。</p>
+<p>问题四：清理缓存的时机是什么？<br>
+至少退后台、memory warning 会触发清空，但猜测缓存大小没有限制。</p>
+<p>其中磁盘 IO 的部分，尤其感受到了，自研缓存想要超越 Assets.car 并不是一件容易的事情。</p>
+<p>那还有一个问题：我们能利用 [UIImage imageNamed:] 的缓存做些什么？<br>
+一个启动优化的思路，是将启动期间需要读取的图片，预先在异步线程调用 imageNamed: 读取并画在一个画布上使它强制解码，等主线程真正要读取时，能减少主线程 Page In 和解码的开销。<br>
+也许还能像二进制重排一样对 Assets.car 进行重排，进一步降低 Page In 的开销。</p>
+<p>🤔</p>
+<h3 id="相关资料">相关资料</h3>
+<p><a href="https://dreampiggy.com/2019/01/18/%E4%B8%BB%E6%B5%81%E5%9B%BE%E7%89%87%E5%8A%A0%E8%BD%BD%E5%BA%93%E6%89%80%E4%BD%BF%E7%94%A8%E7%9A%84%E9%A2%84%E8%A7%A3%E7%A0%81%E7%A9%B6%E7%AB%9F%E5%B9%B2%E4%BA%86%E4%BB%80%E4%B9%88/#more">主流图片加载库所使用的预解码究竟干了什么</a><br>
+<a href="https://juejin.im/post/5cb74d786fb9a068773948fc#heading-12">iOS拾遗—— Assets Catalogs 与 I/O 优化</a></p>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/Fishhook--yuan-li-qian-xi/">
+              <h3 class="post-title">
+                下一篇：Fishhook 原理浅析
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

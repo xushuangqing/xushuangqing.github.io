@@ -1,0 +1,297 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>Xcode中和symbols有关的几个设置 | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">Xcode中和symbols有关的几个设置</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2016-02-29</span>
+            
+          </div>
+          <div class="post-content">
+            <p>其实被这个问题困扰了好久，不过秉承着三分钟热度的新年新气象，还是要多弄懂一点(⊙_⊙)ゞ</p>
+<p>Symbols是什么东西呢？虽然我对它没有深入的了解，但是大概知道它的作用。摘抄<a href="http://book.douban.com/subject/5333562/">《深入理解计算机系统》</a>里的一些描述：</p>
+<blockquote>
+<p>一个典型的ELF可重定位目标文件包含下面几个节：<br>
+... ...<br>
+.symtab：一个符号表，它存放在程序中定义和引用的函数和全局变量信息。一些程序员错误地认为必须通过-g选项来编译程序才能得到符号表信息。实际上，每个可重定位目标文件在.symtab中都有一张符号表。然而，和编译器中的符号表不同，.symtab符号表不包含局部变量的条目。<br>
+... ...<br>
+.debug：一个调试符号表，其条目是程序中定义的局部变量和类型定义，程序中定义和引用的全局变量，以及原始的C源文件。只有以-g选项调用编译驱动程序时才会得到这张表。<br>
+... ...</p>
+</blockquote>
+<blockquote>
+<p>为了构造可执行文件，链接器必须完成两个主要任务：</p>
+</blockquote>
+<ul>
+<li>符号解析（symbol resolution）。目标文件定义和引用符号。符号解析的目的是将每个符号引用刚好和一个符号定义联系起来。</li>
+<li>重定位（relocation）。编译器和汇编器生成从地址0开始的代码和数据节。链接器通过把每个符号定义与一个存储器位置联系起来，然后修改所有对这些符号的引用，使得它们指向这个存储器位置，从而重定位这些节。</li>
+</ul>
+<p>Objective-C有一些自己的生成符号的规则，比如<a href="https://developer.apple.com/library/mac/qa/qa1490/_index.html">文档</a>中有提到：</p>
+<blockquote>
+<p>The dynamic nature of Objective-C complicates things slightly. Because the code that implements a method is not determined until the method is actually called, Objective-C does not define linker symbols for methods. Linker symbols are only defined for classes.</p>
+</blockquote>
+<blockquote>
+<p>Objective-C不会为方法定义链接符号，只会为类定义链接符号。</p>
+</blockquote>
+<p>可以在终端中用<code>nm</code>命令查看一个可重定位文件或可执行文件的符号表，其中加上<code>-a</code>参数可以显示包括调试符号在内的所有符号。</p>
+<p>合理的选择与symbols有关的设置选项，可以缩减app的大小，一定程度上能阻碍与源代码有关的信息被攻击者获得。Xcode的build setting中，有不少与symbols有关，现在我来依次试验这几个设置选项，了解一下它们的具体作用。</p>
+<p>刚开始的时候，我使用Xcode7.2.1新建了一个工程，以下试验均在run和DEBUG模式下进行。</p>
+<hr>
+<h3 id="generate-debug-symbols-gcc_generate_debugging_symbols">Generate Debug Symbols [GCC_GENERATE_DEBUGGING_SYMBOLS]</h3>
+<br>
+在Xcode7.2.1中，```Generate Debug Symbols```这个设置在DEBUG和RELEASE下均默认为```YES```。
+<p>官方文档对这个设置的说明：</p>
+<blockquote>
+<p>Enables or disables generation of debug symbols.  When debug symbols are enabled, the level of detail can be controlled by the build 'Level of Debug Symbols' setting.</p>
+</blockquote>
+<p>调试符号是在编译时生成的。在Xcode中查看构建过程，可以发现，当<code>Generate Debug Symbols</code>选项设置为<code>YES</code>时，每个源文件在编译成.o文件时，编译参数多了<code>-g</code>和<code>-gmodules</code>两项。但链接等其他的过程没有变化。</p>
+<p>Clang文档对<code>-g</code>的描述是：</p>
+<blockquote>
+<p>Generate complete debug info.</p>
+</blockquote>
+<p>当<code>Generate Debug Symbols</code>设置为<code>YES</code>时，编译产生的.o文件会大一些，当然最终生成的可执行文件也大一些。</p>
+<p>当<code>Generate Debug Symbols</code>设置为<code>NO</code>的时候，在Xcode中设置的断点不会中断。但是在程序中打印<code>[NSThread callStackSymbols]</code>，依然可以看到类名和方法名，比如：</p>
+<pre><code>** 0   XSQSymbolsDemo                      0x00000001000667f4 -[ViewController viewDidLoad] + 100**
+</code></pre>
+<p>在程序崩溃时，也可以得到带有类名和方法名的函数调用栈<br>
+<img src="https://xushuangqing.github.io/post-images/Xcode-zhong-he-symbols-you-guan-de-ji-ge-she-zhi/164542-a2b79d3ea7adb285.png" alt="" loading="lazy"></p>
+<p>现在把<code>Generate Debug Symbols</code>设置回<code>YES</code>，开始试验下一个设置。</p>
+<hr>
+<h3 id="debug-information-level-clang_debug_information_level">Debug Information Level [CLANG_DEBUG_INFORMATION_LEVEL]</h3>
+<br>
+在Xcode 7.2.1中，```Debug Information Level```的默认值为```Compiler default```，还有一个选项是```Line tables only```。
+<p>官方文档的描述是：</p>
+<blockquote>
+<p>Toggles the amount of debug information emitted when debug symbols are enabled.  This can impact the size of the generated debug information, which can matter in some cases for large projects (such as when using LTO).</p>
+</blockquote>
+<p>当我把<code>Debug Information Level</code>设置为<code>Line tables only</code>的时候，然后构建app，每个源文件在编译时，都多了一个编译参数：<code>-gline-tables-only</code></p>
+<p>Clang的文档中这样解释<code>-gline-tables-only</code>：</p>
+<blockquote>
+<p>Generate line number tables only.<br>
+This kind of debug info allows to obtain stack traces with function names, file names and line numbers (by such tools as gdb or addr2line). It doesn’t contain any other data (e.g. description of local variables or function parameters).</p>
+</blockquote>
+<blockquote>
+<p>这种类型的调试信息允许获得带有函数名、文件名和行号的函数调用栈，但是不包含其他数据（比如局部变量和函数参数）。</p>
+</blockquote>
+<p>所以当<code>Debug Information Level</code>设置为<code>Line tables only</code>的时候，断点依然会中断，但是无法在调试器中查看局部变量的值：<br>
+<img src="https://xushuangqing.github.io/post-images/Xcode-zhong-he-symbols-you-guan-de-ji-ge-she-zhi/164542-881fa706a9a45e1b.png" alt="" loading="lazy"></p>
+<p>现在把<code>Debug Information Level</code>设置回<code>Compiler default</code>，然后试验下一个设置。</p>
+<hr>
+<h3 id="strip-linked-product-strip_installed_product">Strip Linked Product [STRIP_INSTALLED_PRODUCT]</h3>
+<br>
+在Xcode7.2.1中，```Strip Linked Product```在DEBUG和RELEASE下均默认为```YES```。
+<p>这是一个让我困惑了很久的设置选项。当我把这一设置选项改为<code>NO</code>的时候，最终构建生成的app大小没有任何变化，这让我觉得很奇怪。</p>
+<p>原来，<code>Strip Linked Product</code>也受到<code>Deployment Postprocessing</code>设置选项的影响。在Build Settings中，我们可以看到，<code>Strip Linked Product</code>是在Deployment这栏中的，而<code>Deployment Postprocessing</code>相当于是Deployment的总开关。<br>
+Xcode7.2.1中，<code>Deployment Postprocessing</code>在DEBUG和RELEASE下均默认为<code>NO</code>。</p>
+<p>现在我们把<code>Deployment Postprocessing</code>设置为<code>YES</code>，对比<code>Strip Linked Product</code>设为<code>YES</code>和<code>NO</code>的这两种情况，发现当<code>Strip Linked Product</code>设为<code>YES</code>的时候，app的构建过程多了这样两步：</p>
+<ol>
+<li>在app构建的开始，会生成一些.hmap辅助文件；（为什么会多出这一步我好像还不太清楚）</li>
+<li>在app构建的末尾，会执行Strip操作。<br>
+<img src="https://xushuangqing.github.io/post-images/Xcode-zhong-he-symbols-you-guan-de-ji-ge-she-zhi/164542-c81b2c94f9d08a8a.png" alt="" loading="lazy"></li>
+</ol>
+<br>
+当```Strip Linked Product```设为```YES```的时候，运行app，断点不会中断，在程序中打印```[NSThread callStackSymbols]```也无法看到类名和方法名：
+```
+** 0   XSQSymbolsDemo                      0x000000010001a7f4 XSQSymbolsDemo + 26612**
+```
+<p>而在程序崩溃时，函数调用栈中也无法看到类名和方法名，注意右上角变成了unnamed_function：<br>
+<img src="https://xushuangqing.github.io/post-images/Xcode-zhong-he-symbols-you-guan-de-ji-ge-she-zhi/164542-52df1015c14c2b5f.png" alt="" loading="lazy"></p>
+<p>继续保持<code>Strip Linked Product</code>和<code>Deployment Postprocessing</code>为<code>YES</code>，下面来看看<code>Strip Style</code>设置选项。</p>
+<hr>
+<h3 id="strip-style-strip_style">Strip Style [STRIP_STYLE]</h3>
+<br>
+在Xcode7.2.1中，```Strip Style```在DEBUG和RELEASE下均默认```All Symbols```。
+<p>官方文档中对<code>Strip Style</code>的描述：</p>
+<blockquote>
+<p>Defines the level of symbol stripping to be performed on the linked product of the build.  The default value is defined by the target's product type. [STRIP_STYLE]</p>
+</blockquote>
+<blockquote>
+<p>All Symbols - Completely strips the binary, removing the symbol table and relocation information. [all, -s]<br>
+Non-Global Symbols - Strips non-global symbols, but saves external symbols. [non-global, -x]<br>
+Debugging Symbols - Strips debugging symbols, but saves local and global symbols. [debugging, -S]</p>
+</blockquote>
+<p>选择不同的<code>Strip Style</code>时，app构建末尾的Strip操作会被带上对应的参数。</p>
+<p>如果选择<code>debugging symbols</code>的话，函数调用栈中，类名和方法名还是可以看到的。<br>
+<img src="https://xushuangqing.github.io/post-images/Xcode-zhong-he-symbols-you-guan-de-ji-ge-she-zhi/164542-480ae1aa0138141e.png" alt="" loading="lazy"></p>
+<p>如果我们构建的不是一个app，而是一个静态库，需要注意，静态库是不可以strip all的。这时构建会失败。想想符号在重定位时的作用，如果构建的静态库真的能剥离所有符号，那么它也就没法被链接了。</p>
+<p>现在我们保持<code>Deployment Postprocessing</code>为<code>YES</code>，<code>Strip Linked Product</code>改回<code>NO</code>，<code>Strip Style</code>改回<code>All Symbols</code>，接下来看下一个设置。</p>
+<hr>
+<h3 id="strip-debug-symbols-during-copy-copy_phase_strip">Strip Debug Symbols During Copy [COPY_PHASE_STRIP]</h3>
+<br>
+网上有很多文章，以为```Strip Debug Symbols During Copy```开启的时候，app中的调试符号会被剥离掉。我感觉他们混淆了```Strip Linked Product```和```Strip Debug Symbols During Copy```的用法。
+<p>文档上的描述是：</p>
+<blockquote>
+<p>Activating this setting causes binary files which are copied during the build (e.g., in a Copy Bundle Resources or Copy Files build phase) to be stripped of debugging symbols.  It does not cause the linked product of a target to be stripped (use Strip Linked Product for that).</p>
+</blockquote>
+<p><code>Strip Debug Symbols During Copy</code>中的<code>During Copy</code>是什么意思呢？我觉得可能是app中引入的某些类型的库，在app的构建过程中需要被复制一次。虽然我暂时没找全究竟什么样的“库”需要在app构建时被复制，但是我发现，当app中包含extension或者watch app的时候，构建过程中会有Copy的步骤：<br>
+<img src="https://xushuangqing.github.io/post-images/Xcode-zhong-he-symbols-you-guan-de-ji-ge-she-zhi/164542-00f430592a580b5b.png" alt="" loading="lazy"></p>
+<p>当我将app（而非extension）的<code>Strip Debug Symbols During Copy</code>设置为<code>YES</code>之后，在这句copy的命令中会多出<code>-strip-debug-symbols</code>参数。</p>
+<p>但是这里，strip并不能成功，并且出现了warning：</p>
+<blockquote>
+<p>warning: skipping copy phase strip, binary is code signed: /Users/xsq/Library/Developer/Xcode/DerivedData/XSQSymbolsDemo-cysszdsykroyyddkvvyffgboglvo/Build/Products/Debug-iphoneos/Today.appex/Today</p>
+</blockquote>
+<p>这似乎是由于app中的today extention已经经过了code sign，导致无法被篡改引起的警告。</p>
+<p>那么如果略过code sign的过程，是否就能成功strip呢？我想使用模拟器调试可以略过code sign过程，于是便在模拟器上试了试。果然这个warning消失了。</p>
+<p><code>Strip Debug Symbols During Copy</code>设置为<code>YES</code>时，打开对应.app文件的“显式包内容”，可以看到，<code>/PlugIns/Today.appex</code>文件的大小变小了。（不过这些只能在使用模拟器时奏效）</p>
+<p><code>Strip Debug Symbols During Copy</code>置为YES的时候，today extension中的断点将不会中断，但是打印<code>[NSThread callStackSymbols]</code>时的类名和方法名还是可以看见的。</p>
+<p>现在我们把<code>Strip Debug Symbols During Copy</code>设置回<code>NO</code>，来看看下一个设置。</p>
+<hr>
+<h3 id="debug-information-format-debug_information_format">Debug Information Format [DEBUG_INFORMATION_FORMAT]</h3>
+<br>
+Xcode7.2.1中，```Debug Information Format```在DEBUG下默认为```DWARF```，在RELEASE下默认为```DWARF with dSYM File```。
+<p>官方文档的解释是：</p>
+<blockquote>
+<p>This setting controls the format of debug information used by the developer tools. [DEBUG_INFORMATION_FORMAT]</p>
+</blockquote>
+<blockquote>
+<p>DWARF - Object files and linked products will use DWARF as the debug information format. [dwarf]<br>
+DWARF with dSYM File - Object files and linked products will use DWARF as the debug information format, and Xcode will also produce a dSYM file containing the debug information from the individual object files (except that a dSYM file is not needed and will not be created for static library or object file products). [dwarf-with-dsym]</p>
+</blockquote>
+<p>当<code>Debug Information Format</code>为<code>DWARF with dSYM File</code>的时候，构建过程中多了一步Generate dSYM File：<br>
+<img src="https://xushuangqing.github.io/post-images/Xcode-zhong-he-symbols-you-guan-de-ji-ge-she-zhi/164542-a4ac67460d561fb1.png" alt="" loading="lazy"><br>
+最终产出的文件也多了一个dSYM文件。</p>
+<p>不过，既然这个设置叫做<code>Debug Information Format</code>，所以首先得有调试信息。如果此时<code>Generate Debug Symbols</code>选择的是<code>NO</code>的话，是没法产出dSYM文件的。</p>
+<p>dSYM文件的生成，是在Strip等命令执行之前。所以无论<code>Strip Linked Product</code>是否开启，生成的dSYM文件都不会受影响。</p>
+<p>不过正如文档中所说，无法为静态库生成dSYM文件。即便为给一个静态库的<code>Debug Information Format</code>设置为<code>DWARF with dSYM File</code>，构建过程中依然不会有生成dSYM文件的步骤。</p>
+<hr>
+<h3 id="一种配置方案">一种配置方案</h3>
+<br>
+了解了每个设置的意思，个人觉得对于一个普通的app来说可以这样配置这些设置：
+- ```Generate Debug Symbols```：DEBUG和RELEASE下均设为```YES```（和Xcode默认一致）；
+- ```Debug Information Level```：DEBUG和RELEASE下均设为```Compiler default```（和Xcode默认一致）；
+- ```Deployment Postprocessing```：DEBUG下设为NO，RELEASE下设为YES，这样RELEASE模式下就可以去除符号缩减app的大小（但是似乎设置为YES后，会牵涉一些和bitcode有关的设置，对于bitcode暂时还不太了解(´･_･`)）；
+- ```Strip Linked Product```：DEBUG下设为NO，RELEASE下设为YES，用于RELEASE模式下缩减app的大小；
+- ```Strip Style```：DEBUG和RELEASE下均设为```All Symbols```（和Xcode默认一致）；
+- ```Strip Debug Symbols During Copy```：DEBUG下设为```NO```，RELEASE下设为```YES```；
+- ```Debug Information Format```：DEBUG下设为```DWARF```，RELEASE下设为```DWARF with dSYM File```，dSYM文件需要用于符号化crash log（和Xcode默认一致）；
+<hr>
+<h4 id="参考">参考</h4>
+<p><a href="http://book.douban.com/subject/5333562/">深入理解计算机系统</a><br>
+<a href="https://developer.apple.com/library/mac/documentation/DeveloperTools/Reference/XcodeBuildSettingRef/1-Build_Setting_Reference/build_setting_ref.html">Build Setting Reference</a><br>
+<a href="https://www.cocoanetics.com/2015/04/skipping-copy-phase-strip/">Skipping Copy Phase Strip</a><br>
+<a href="http://jonathanblog2000.blogspot.sg/2013/07/xcode-build-settings-for-debug-symbol.html">xcode build settings for debug symbol</a><br>
+<a href="http://clang.llvm.org/docs/UsersManual.html#clang-compiler-user-s-manual">Clang Compiler User’s Manual</a><br>
+<a href="http://bdunagan.com/2010/05/15/symbolification-shipping-symbols/">Symbolification: Shipping Symbols</a><br>
+<a href="https://developer.apple.com/library/mac/qa/qa1490/_index.html">Technical Q&amp;A QA1490</a></p>
+<hr>
+<h4 id="20160417更新">2016.04.17更新</h4>
+<br>
+某天，我看了公司的项目的设置，发现```Deployment Postprocessing```这项在DEBUG和RELEASE下均为```NO```，让我有些奇怪，难道公司的项目没有滤去调试符号？
+于是我archive了一下，发现，在archive的过程中，其实是跑了strip的命令的，让我有点吃惊。这说明run和archive的构建过程是不同的。
+<p>查了官方文档，暂时没能查到run和archive到底有哪里不同，但是<a href="https://developer.apple.com/library/mac/documentation/DeveloperTools/Reference/XcodeBuildSettingRef/1-Build_Setting_Reference/build_setting_ref.html#//apple_ref/doc/uid/TP40003931-CH3-SW45">这里</a>对ACTION的解释让我有些在意。对ACTION的设置会影响到<code>Deployment Postprocessing</code>的默认值，即当<code>$ACTION = install</code>的时候，<code>Deployment Postprocessing</code>默认为<code>YES</code>。</p>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/wu-nao-zai-block-zhong-yong-weakSelf-de-jiao-xun-(╥﹏╥)/">
+              <h3 class="post-title">
+                下一篇：无脑在block中用weakSelf的教训(╥﹏╥)
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

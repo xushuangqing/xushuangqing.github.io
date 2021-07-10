@@ -1,0 +1,268 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>写给老板看的iOS9的几个新特性 | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">写给老板看的iOS9的几个新特性</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2015-07-08</span>
+            
+          </div>
+          <div class="post-content">
+            <p>相比于iOS7和iOS8，个人认为iOS9的新特性没有那么多。与我们的工作关系最密切、也是苹果主打的两个新特性是<strong>multitasking</strong>和<strong>search</strong>。</p>
+<hr>
+<p>####Multitasking</p>
+<br>
+首先，multitasking是**只支持某几种iPad**的。
+<p>有三种不同形式的multitasking，分别是：</p>
+<ol>
+<li>
+<p>Slide Over<br>
+当iPad上正在运行着某个app的时候，从屏幕的右边缘向左滑动，可以滑出一个覆盖在当前用户界面上的界面，从这个界面中可以选择并启动一个secondary app。这个secondary app启动后会覆盖在原先的app的右侧。Slide Over这个场景，主要是为了便于用户临时操作一下secondary app。<br>
+<img src="https://xushuangqing.github.io/post-images/xie-gei-lao-ban-kan-de-iOS9-de-ji-ge-xin-te-xing/164542-6c3fb2770de2413c.png" alt="Slide Over" loading="lazy"></p>
+</li>
+<li>
+<p>Split View<br>
+Split View这个形式更像一个真正的multitasking。但是目前Split View只支持iPad中性能最高的iPad Air 2。两个app并列呈现在屏幕上，其中左侧的app是primary app，右侧的app是secondary app。用户可以滑动两个app之间的分界线，当分界线滑倒最左侧时，secondary app将变成primary app。<br>
+Slide Over和Split View可以互相转换，只要用户点击一下Slide Over界面旁边的白色竖条按钮。<br>
+<img src="https://xushuangqing.github.io/post-images/xie-gei-lao-ban-kan-de-iOS9-de-ji-ge-xin-te-xing/164542-b5157cf98d3ee85d.png" alt="Split View" loading="lazy"></p>
+</li>
+<li>
+<p>Picture in Picture<br>
+用户可以在屏幕上悬浮一个播放器，并且可以移动和缩放它。<br>
+<img src="https://xushuangqing.github.io/post-images/xie-gei-lao-ban-kan-de-iOS9-de-ji-ge-xin-te-xing/164542-78e3bdae625936d0.png" alt="PiP" loading="lazy"></p>
+</li>
+</ol>
+<p>可能对PM有用的信息：</p>
+<ul>
+<li>三种形式的multitasking所支持的设备：</li>
+</ul>
+<figure data-type="image" tabindex="1"><img src="https://xushuangqing.github.io/post-images/xie-gei-lao-ban-kan-de-iOS9-de-ji-ge-xin-te-xing/164542-44766ff64981dda5.png" alt="支持的设备" loading="lazy"></figure>
+<ul>
+<li>
+<p>Multitasking是可以被用户从系统设置里关掉的。</p>
+</li>
+<li>
+<p>Slide Over和Split View其实还是比较简单的多任务形式，两个app之间并不能产生交互。</p>
+</li>
+<li>
+<p>Split View情景下，两个在屏幕上可能有这些排列方式：</p>
+</li>
+</ul>
+<figure data-type="image" tabindex="2"><img src="https://xushuangqing.github.io/post-images/xie-gei-lao-ban-kan-de-iOS9-de-ji-ge-xin-te-xing/164542-065db2870ce0327d.png" alt="Split View的排列方式" loading="lazy"></figure>
+<ul>
+<li>
+<p>PiP是为那些视频播放app准备的，一些杂七杂八的视频不应该使用PiP（比如游戏中的转场动画）。网页中的视频也可以支持PiP。</p>
+</li>
+<li>
+<p>尝试使用了PiP，发现第三方程序员可以：<br>
+(1) 控制什么时候启用/停止悬浮播放器：比如可以自定义一个button，用户点击这个button就启用/停止悬浮播放器。<br>
+(2) 收到悬浮播放器在被启用、关闭、返回原播放器的回调。<br>
+(3) 在某些时候禁用悬浮播放器。</p>
+</li>
+<li>
+<p>但是目前看来，第三方程序员不能：<br>
+(1) 自定义悬浮播放器的功能：目前悬浮播放器只有三个button，分别是回到原播放器、暂停/播放、关闭，还有一个进度条，但是进度条只能显示进度，不能拖拽。<br>
+(2) 更改悬浮播放器的外观，包括具体位置和尺寸：用户可以拖拽悬浮播放器，但是最后只能拖拽到屏幕的四个角落，不能停在屏幕中间；新闻上说悬浮播放器可以有三种尺寸（但是模拟器上模拟不出缩放手势）。但是代码里找不到与播放器位置和尺寸相关的方法，猜测第三方程序员无法对播放器的外观进行控制。</p>
+</li>
+</ul>
+<p>可能对Dev有用的信息：</p>
+<ul>
+<li>
+<p>几乎所有的app都应该支持Slide View和Split Over，除了全屏游戏等少数几类app可以通过在plist中配置表明不支持multitasking。</p>
+</li>
+<li>
+<p>Slider Over和Split View中，两个app都是运行在前台的；PiP中，如果悬浮播放器所属的app没有在屏幕上，那么它是运行在后台的。</p>
+</li>
+<li>
+<p>Slide Over和Split View都会导致一个app的窗口尺寸变得更为灵活，这时应该善用auto layout和size class。</p>
+</li>
+<li>
+<p>虽然某些app可能没有用到键盘，但是它可能会与其他app同时出现在屏幕上，因此每个支持iOS9的app都应该对键盘事件作出响应。</p>
+</li>
+<li>
+<p>如果以前的代码中曾把屏幕的尺寸来当作窗口的尺寸，在iOS9中必须尽快改过来。</p>
+</li>
+<li>
+<p>如果app会在连接上第二个物理屏幕的时候，在第二个屏幕上显示内容，此时需要对过渡进行测试。只有primary app可以在第二个物理屏幕上工作。</p>
+</li>
+<li>
+<p>在iOS9及以后，需要更小心的利用CPU、GPU、内存、I/O等资源。</p>
+</li>
+<li>
+<p>MediaPlayer在iOS9将过时，应该使用AVKit和AVFoundation替代它。</p>
+</li>
+</ul>
+<hr>
+<p>####Search</p>
+<br>
+iOS9之后，用户可以在Spotlight、Handoff和Siri Reminders中，对app之内的内容进行搜索。可以建立索引的内容包括用户产生的内容、app的特性和公开的网站内容。搜索为第三方app提供了新的入口。与搜索有关的技术有以下几种：
+<ol>
+<li>
+<p>使用NSUserActivity让app activity供搜索：<br>
+NSUserActivity原本是用来支持Handoff这个特性的，主要用于记录当前app所处的状态（比如当前在哪个view）。iOS9之后，activity默认是可以供本地搜索的。<br>
+当app内的某些内容不触及用户隐私，也可以把这个activity标记为可供公开搜索的。苹果会收集用户对搜索功能的使用状况，当这个可activity被很多用户搜索过，达到了一定阈值，这个activity就可以被所有用户搜索得到，如果用户没有安装这个app，系统也会给出这个app的URL。</p>
+</li>
+<li>
+<p>使用Core Spotlight让app的内容可供搜索：<br>
+第三方app可以将用户产生的内容组织成CSSearchableItem对象，供Spotlight搜索。系统会对这些项目做持久化存储。这些项目只能在本地搜索得到。<br>
+<img src="https://xushuangqing.github.io/post-images/xie-gei-lao-ban-kan-de-iOS9-de-ji-ge-xin-te-xing/164542-361fabf0f7806c08.png" alt="Core Spotlight" loading="lazy"></p>
+</li>
+<li>
+<p>通过加入web markup，让相关的网页内容供搜索：<br>
+第三方app可以在其网站前端代码中加入一些markup，便于被苹果的爬虫发现，这样当用户进行搜索时，系统就可能将这个app中相关的内容展现在搜索结果里。</p>
+</li>
+<li>
+<p>使用universal link可以让app和网站无缝连接：<br>
+通过给app添加一个entitlement，同时给网站添加对应的JSON文件，可以做到当点击某个链接时，自动跳转到已经安装的app的对应界面中。</p>
+</li>
+</ol>
+<p>（已经写代码尝试了Core Spotlight并成功。试了activity但没搜出来。）</p>
+<p>可能对PM有用的信息：</p>
+<ul>
+<li>
+<p>NSUserActivity和Core Spotlight这两种搜索方式，将不支持iPhone 4s、iPad 2、iPad 3、iPad mini、iPod touch 5及以下设备。</p>
+</li>
+<li>
+<p>所有可以被搜索的内容分为两种：私有的和可以公开的。标记为私有的内容（比如用户的短信）只能在用户自己的手机上搜索得到。标记为可公开的内容，当苹果认为用户数据达到一定阈值（针对activity）或被爬虫爬到（针对web markup），就可以被所有用户搜索到。</p>
+</li>
+<li>
+<p>为了给用户提供更好的体验，系统会根据用户使用search的行为来决定搜索结果的顺序。所以每个app都应该尽量只让有价值的信息变得可供搜索。</p>
+</li>
+<li>
+<p>当用户点击搜索结果的时候，app应直接跳转到搜索结果对应的界面，应该避免中间步骤、闪屏和空隙。</p>
+</li>
+<li>
+<p>苹果建议，用户创建的内容都应该被放进索引中。</p>
+</li>
+</ul>
+<p>可能对Dev有用的信息：</p>
+<ul>
+<li>
+<p>注意性能。从点击一个搜索结果到打开这个app，这之间的时间会被系统收集，并影响到对搜索结果的排序。</p>
+</li>
+<li>
+<p>对于某个同样的内容，在建立索引时，尽量使用同一个identifier。避免多个API创建出重复的搜索结果。</p>
+</li>
+</ul>
+<hr>
+<p>看的文档：</p>
+<p><a href="https://developer.apple.com/library/prerelease/ios/releasenotes/General/WhatsNewIniOS/Articles/iOS9.html#//apple_ref/doc/uid/TP40016198-DontLinkElementID_1">What's New in iOS</a><br>
+<a href="https://developer.apple.com/library/prerelease/ios/documentation/WindowsViews/Conceptual/AdoptingMultitaskingOniPad/index.html">Adopting Multitasking Enhancements on iPad</a><br>
+<a href="https://developer.apple.com/library/prerelease/ios/technotes/TN2416/_index.html#//apple_ref/doc/uid/DTS40016269">iOS Search API Best Practices and FAQs</a></p>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/xiao-shi-iOS-she-bei-shang-ping-mu-de-xuan-zhuan/">
+              <h3 class="post-title">
+                下一篇：小试iOS设备上屏幕的旋转
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

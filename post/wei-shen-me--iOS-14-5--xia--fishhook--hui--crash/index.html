@@ -1,0 +1,177 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>为什么 iOS 14.5 下 fishhook 会 crash | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">为什么 iOS 14.5 下 fishhook 会 crash</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2021-04-11</span>
+            
+          </div>
+          <div class="post-content">
+            <h2 id="现象">现象</h2>
+<p>将 fishhook <a href="https://github.com/facebook/fishhook/tree/8ef82f0711494ecc78d16bf6ce76f5ad92e5f67b">开源版本</a> 运行在 iOS 14.5 arm64e 的设备上，很容易可以复现一个 crash：</p>
+<pre><code>static void (*orig_dispatch_async)(dispatch_queue_t queue, dispatch_block_t block);
+static void hooked_dispatch_async(dispatch_queue_t queue, dispatch_block_t block) {
+  orig_dispatch_async(queue, block);
+}
+
+- (void)startHook {
+  struct rebinding r[] = {
+    {&quot;dispatch_async&quot;, hooked_dispatch_async, (void *)&amp;orig_dispatch_async}
+  };
+  rebind_symbols(r, sizeof(r)/sizeof(struct rebinding));
+}
+</code></pre>
+<p>Crash  会发生在</p>
+<pre><code>indirect_symbol_bindings[i] = cur-&gt;rebindings[j].replacement;
+</code></pre>
+<p>这一行，crash 原因为 <code>EXC_BAD_ACCESS</code>。</p>
+<p><img src="https://xushuangqing.github.io/post-images/wei-shen-me--iOS-14-5--xia--fishhook--hui--crash/164542-0c594faeaca37215.png" alt="" loading="lazy"><br>
+也就是 <a href="https://github.com/facebook/fishhook/issues/82">#82</a> 反馈的问题。</p>
+<h2 id="原因">原因</h2>
+<p>在了解 <a href="https://www.jianshu.com/p/7d8922dadef3">fishhook 原理</a>后，经过一些调试分析，可以发现发生 crash 的原因：</p>
+<p>被赋值的 <code>indirect_symbol_bindings[i]</code> 所在的内存区域，是只读的。而“赋值”是一个写操作，于是产生了 <code>EXC_BAD_ACCESS</code>。</p>
+<p>Fishhook 考虑到过内存访问权限的问题，在 <a href="https://github.com/facebook/fishhook/pull/65/files">If hooking in __DATA_CONST, make writable before trying to write</a> 和 <a href="https://github.com/facebook/fishhook/pull/66/files">Properly restore protections for iOS 13</a> 这两个 PR 中，对于 <code>__DATA_CONST</code> 段中的数据，作者在</p>
+<pre><code>indirect_symbol_bindings[i] = cur-&gt;rebindings[j].replacement;
+
+</code></pre>
+<p>这一行赋值操作之前，使用了 <code>mprotect</code> 将所属内存区域的访问权限改成了“读写”，在这一行赋值操作以后，再次使用 <code>mprotect</code> 将所属内存区域的访问权限改回了原始值。</p>
+<p>然而这两个 PR 其实是有问题的：<br>
+1、<code>mprotect</code> 修改内存区域的访问权限时，传入的内存地址是需要按页对齐的，所以开源版本的 fishhook 在旧版 iOS 系统上，<code>mprotect</code> 都有很大概率不成功（返回 -1），<a href="https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/mprotect.2.html">官方文档</a>也印证了这点。</p>
+<figure data-type="image" tabindex="1"><img src="https://xushuangqing.github.io/post-images/wei-shen-me--iOS-14-5--xia--fishhook--hui--crash/164542-ce2de2e917534672.png" alt="⬆️ iOS 14.4 测试结果" loading="lazy"></figure>
+<p>2、<code>oldProtection = get_protection(rebindings);</code> 这一行的目的是保存原先的访问权限，但是传入的参数是错误的，这会导致“在这一行赋值操作以后，再次使用 <code>mprotect</code> 将所属内存区域的访问权限改回了原始值”在实际执行中，“改回了原始值”实际是“改成可读写”（当然由于 <code>mprotect</code> 页对齐的问题很大概率修改不成功），因为 rebindings 是 malloc 出来的。</p>
+<p>所以，一直以来，这两个 PR 大概率没有发挥预期的作用， <code>indirect_symbol_bindings[i]</code> 所在的内存区域，如果在程序启动后是只读的，那么 fishhook 的过程中，它也是只读的。只要赋值，就会触发 crash。</p>
+<h2 id="为什么-crash-只发生在-ios-145">为什么 crash 只发生在 iOS 14.5？</h2>
+<p>在我构造的复现环境中，crash 发生在对系统库 libxpc.dylib 的 <code>__DATA_CONST</code> 段 <code>__auth_got</code> 节的重绑定中，此时 <code>indirect_symbol_bindings[i]</code> 位于 <code>__DATA_CONST</code> 段 <code>__auth_got</code> 节映射到内存的区域中。我们来对比一下 iOS 14.4 和 iOS 14.5 的区别：<br>
+1、无论是 iOS 14.4 还是 iOS 14.5，<code>mprotect</code> 修改内存区域为读写时，都失败了（返回 -1）。<br>
+2、但是在 <code>mprotect</code> 修改前，iOS 14.4 上 <code>indirect_symbol_bindings[i]</code> 所在的内存区域是读写的，而 iOS 14.5 上变成了只读。</p>
+<p>为了便于理解，我们可以在程序启动后、fishhook 开始前，通过 memory graph 来观察各个内存区域的访问权限：</p>
+<blockquote>
+<p>抓取 memory graph 后，在 Xcode 中选择 File -&gt; Export Memory Graph，导出 memory graph 后使用 vmmap 命令得到各个内存区域的快照</p>
+</blockquote>
+<p>观察 libxpc.dylib 的 <code>__DATA_CONST</code> 段映射在内存中的访问权限：</p>
+<pre><code># iOS 14.5 
+__DATA_CONST                1edadef10-1edae35c0    [   18K    18K     4K     0K] r--/rw- SM=COW          /usr/lib/system/libxpc.dylib
+# iOS 14.4
+__DATA_CONST                1f30167b0-1f301ae70    [   18K    18K     6K     0K] rw-/rw- SM=COW          /usr/lib/system/libxpc.dylib
+</code></pre>
+<p>可以发现，iOS 14.5 中，libxpc.dylib 的 <code>__DATA_CONST</code> 段是只读的，而 iOS 14.4 中是读写的。<br>
+同时观察其他系统库，能发现 iOS 14.5 中，不少系统库的 <code>__DATA_CONST</code> 段都从 iOS 14.4 的读写变成了只读，同时撞上了一直以来都有的 <code>mprotect</code> 失效的问题，所以产生了 crash。</p>
+<p>@maniackk 在 github 上的 PR <a href="https://github.com/facebook/fishhook/pull/84">If hooking in __DATA_CONST/__AUTH_CONST, promise writable before trying to write #84</a> 中对上文所说的两个问题做了解决。</p>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/cong--Exported-Symbols--ying-yong-yu-bao-da-xiao-you-hua-shuo-dao-fu-hao-bang-ding/">
+              <h3 class="post-title">
+                下一篇：从 Exported Symbols 应用于包大小优化说到符号绑定
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

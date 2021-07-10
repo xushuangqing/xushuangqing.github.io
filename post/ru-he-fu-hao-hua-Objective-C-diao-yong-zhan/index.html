@@ -1,0 +1,221 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>如何符号化Objective C调用栈 | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">如何符号化Objective C调用栈</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2017-09-01</span>
+            
+          </div>
+          <div class="post-content">
+            <p>本文讲述的是符号化“残破”的栈，如果你有一个系统生成的crash日志，请交给Xcode自带的symbolicatecrash脚本。</p>
+<p>Symbolicatecrash脚本的核心也是通过atos功能逐行符号化，但人家封装好了，比自己手动一行一行做快很多。</p>
+<p>示例栈：</p>
+<pre><code> 	0   XSQSymbolicateDemo                  0x00000001000ba530 XSQSymbolicateDemo + 25904
+	1   XSQSymbolicateDemo                  0x00000001000ba4f0 XSQSymbolicateDemo + 25840
+	2   XSQSymbolicateDemo                  0x00000001000ba4bc XSQSymbolicateDemo + 25788
+	3   XSQSymbolicateDemo                  0x00000001000ba478 XSQSymbolicateDemo + 25720
+	4   UIKit                               0x00000001966870ec &lt;redacted&gt; + 96
+	5   UIKit                               0x000000019668706c &lt;redacted&gt; + 80
+	6   UIKit                               0x00000001966715e0 &lt;redacted&gt; + 440
+	7   UIKit                               0x0000000196686950 &lt;redacted&gt; + 576
+	8   UIKit                               0x000000019668646c &lt;redacted&gt; + 2480
+	9   UIKit                               0x0000000196681804 &lt;redacted&gt; + 3192
+	10  UIKit                               0x0000000196652418 &lt;redacted&gt; + 340
+	11  UIKit                               0x0000000196e4bf64 &lt;redacted&gt; + 2400
+</code></pre>
+<p>这是我写的一个demo app，并且在编译后期滤去了符号表，所以仅能看到一些奇怪的地址。</p>
+<h5 id="如何符号化第三方app内的符号">如何符号化第三方app内的符号</h5>
+<p>以第一行：</p>
+<pre><code>0   XSQSymbolicateDemo                  0x00000001000ba530 XSQSymbolicateDemo + 25904
+</code></pre>
+<p>为例</p>
+<p>需要条件：</p>
+<p>（1）atos工具（Xcode安装时一般会自带）</p>
+<p>（2）确认app运行的架构（armv7、arm64）</p>
+<p>（3）app对应的dSYM文件（出包时获得）</p>
+<p>（4）app代码载入到内存的基地址（后文详细介绍）</p>
+<p>方法：</p>
+<p>在命令行中输入：</p>
+<pre><code>xcrun atos -arch arm64 -o ./XSQSymbolicateDemo.app.dSYM/Contents/Resources/DWARF/XSQSymbolicateDemo  -l  0x1000b4000 0x00000001000ba530
+</code></pre>
+<figure data-type="image" tabindex="1"><img src="https://xushuangqing.github.io/post-images/ru-he-fu-hao-hua-Objective-C-diao-yong-zhan/164542-92eaf007c808880a.png" alt="" loading="lazy"></figure>
+<p>即可得到符号化后的结果：</p>
+<pre><code>-[ViewController helloWorld2] (in XSQSymbolicateDemo) (ViewController.m:100)
+</code></pre>
+<h5 id="如何符号化系统动态库中的符号">如何符号化系统动态库中的符号</h5>
+<p>以这一行为例：</p>
+<pre><code>4   UIKit                               0x00000001966870ec &lt;redacted&gt; + 96
+</code></pre>
+<p>需要条件：</p>
+<p>（1）atos工具（Xcode安装时一般会自带）</p>
+<p>（2）确认app运行的架构（armv7、arm64）</p>
+<p>（2）该OS版本、该动态库的符号文件（将该手机连接到电脑的Xcode上，会自动同步系统符号文件）</p>
+<p>（3）该动态库载入到内存的基地址（后文详细介绍）</p>
+<p>方法：</p>
+<p>在命令行中输入：</p>
+<pre><code>xcrun atos -arch arm64 -o ~/Library/Developer/Xcode/iOS\ DeviceSupport/10.3.1\ \(14E304\)/Symbols/System/Library/Frameworks/UIKit.framework/UIKit -l  0x196642000 0x00000001966870ec
+-[UIApplication sendAction:to:from:forEvent:] (in UIKit) + 96
+</code></pre>
+<figure data-type="image" tabindex="2"><img src="https://xushuangqing.github.io/post-images/ru-he-fu-hao-hua-Objective-C-diao-yong-zhan/164542-312c39652df804e8.png" alt="" loading="lazy"></figure>
+<p>即可得到符号化后的结果：</p>
+<pre><code>-[UIApplication sendAction:to:from:forEvent:] (in UIKit) + 96
+</code></pre>
+<h5 id="如何获取基地址">如何获取基地址</h5>
+<p>注意：基地址在进程每次启动时决定，所以重启进程后，符号化时必须使用<strong>当次启动</strong>的基地址</p>
+<p><strong>方案一：从iOS生成的crash日志中获取</strong></p>
+<p>在iOS系统生成的crash日志中的下半部分，有这样的一些信息：</p>
+<figure data-type="image" tabindex="3"><img src="https://xushuangqing.github.io/post-images/ru-he-fu-hao-hua-Objective-C-diao-yong-zhan/164542-6ff2da0526ef83e6.png" alt="" loading="lazy"></figure>
+<p>蓝色框圈出来的部分，即为app代码载入到内存的基地址</p>
+<p>红色框圈出来的部分，即为各个动态库载入到内存的基地址</p>
+<p><strong>方案二：在app运行时打印</strong></p>
+<p>可以在app中调用如下代码获取各个image的基地址：</p>
+<pre><code>void printAllImage()
+{
+    for (int i = 0; i &lt; _dyld_image_count(); i++) {
+        char *image_name = (char *)_dyld_get_image_name(i);
+        const struct mach_header *mh = _dyld_get_image_header(i);
+        intptr_t vmaddr_slide = _dyld_get_image_vmaddr_slide(i);
+        
+        NSLog(@&quot;Image name %s at address 0x%llx and ASLR slide 0x%lx.\n&quot;,
+               image_name, (mach_vm_address_t)mh, vmaddr_slide);
+    }
+}
+</code></pre>
+<p>得到如下输出：</p>
+<pre><code>Image name /var/containers/Bundle/Application/351121C8-CFE4-49AD-ACC0-A70C5BF1C4A6/XSQSymbolicateDemo.app/XSQSymbolicateDemo at address 0x1000b4000 and ASLR slide 0xb4000.
+ Image name /System/Library/Frameworks/Foundation.framework/Foundation at address 0x190f0c000 and ASLR slide 0xeedc000.
+ Image name /usr/lib/libarchive.2.dylib at address 0x190ee0000 and ASLR slide 0xeedc000.
+ Image name /usr/lib/libbz2.1.0.dylib at address 0x190e9e000 and ASLR slide 0xeedc000.
+ Image name /usr/lib/libSystem.B.dylib at address 0x18ef04000 and ASLR slide 0xeedc000.
+ Image name /usr/lib/system/libcache.dylib at address 0x18f35a000 and ASLR slide 0xeedc000.
+......
+</code></pre>
+<p>可以看到第一行代表的是app自身，之后的每一行是app载入的动态库们。</p>
+<h5 id="介绍加载和aslr">介绍加载和ASLR</h5>
+<p>大致理解：</p>
+<p>在进程启动的时候，内核加载器或者dyld会将指令加载到内存中。</p>
+<p>ASLR全名Address Space Layout Randomization，地址空间布局随机化，用于防范恶意程序对已知地址进行攻击</p>
+<p>在ASLR引入之前，由于加载的规则是固定的，所以理论上，一个进程不管重启多少次，每条指令对应的内存中的地址都是一样的。而每条指令对应到内存中的哪个地址，可以通过分析Mach-O文件分析出来。这就容易产生安全漏洞。</p>
+<p>ASLR引入后，在进程启动前期的加载阶段，会生成一个随机数offset，让加载形成的内存整体偏移一个offset。</p>
+<p>这样一个进程多次启动，每次行程的内存空间布局都不完全一致。同一个指令，经过多次启动，每次都会被布局到一个新计算出来的地址。</p>
+<p>所以仅仅凭借“一个指令在内存中的地址”和dSYM文件，是无法进行符号化的，因为这个“地址”同时依赖于ASLR生成的offset。</p>
+<p>我理解其实只需要一个offset，配合已知的架构、加载方式等信息，应该就能推测出app自身的基地址和各个库的基地址。尝试后也证明，各个库的基地址-offset后的值在同个设备的多次启动上是一致的。<br>
+但是为了图省事，还是自己打印一下所有库的基地址吧(´･ω･`)</p>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/NSDecimalNumber-chi-jiu-hua-jing-du-yi-chu-de-keng-(╥﹏╥)/">
+              <h3 class="post-title">
+                下一篇：NSDecimalNumber持久化精度溢出的坑(╥﹏╥)
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

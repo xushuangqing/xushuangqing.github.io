@@ -1,0 +1,209 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>对iOS runtime的一点理解（1） | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">对iOS runtime的一点理解（1）</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2015-04-22</span>
+            
+          </div>
+          <div class="post-content">
+            <p>在我刚刚接触iOS开发的时候，我一直很奇怪，为什么OC把方法调用称作“发送消息”呢。后来，我还发现，有些方法即便只有声明没有实现，也可以被“调用”，只是在运行时会崩溃。再后来，我还发现了selector这个神奇的东西，却不甚明白它是做什么用的。就那么稀里糊涂的做了大半年小码农，直到有一天我看了<a href="https://developer.apple.com/library/ios/documentation/Cocoa/Conceptual/ObjCRuntimeGuide/Articles/ocrtHowMessagingWorks.html#//apple_ref/doc/uid/TP40008048-CH104-SW1">runtime programming guide</a>这篇文档，才开始明白我以前疑惑的到底是什么。</p>
+<hr>
+<p>在OC中，消息是直到运行时才被绑定在方法实现上的。</p>
+<p>在编译的过程中，编译器会把一个消息表达式转换成对<code>objc_msgSend</code>方法的调用。<code>objc_msgSend</code>方法会以**接收消息的对象（receiver）<strong>和</strong>消息的方法名（selector）**作为两个主要的参数，再加上消息本身带有的参数。比如：</p>
+<pre><code>[receiver message];
+</code></pre>
+<p>就会被转化成：</p>
+<pre><code>objc_msgSend(receiver, selector);
+</code></pre>
+<p>当程序运行的时候，运行时系统会根据传入<code>objc_msgSend</code>方法的receiver和selector来查找应该被执行的过程。也就是说，具体哪段代码被执行是由receiver和selector这两者共同决定的。</p>
+<p>那么怎么根据receiver和selector来查找对应的过程呢？<br>
+发送消息的关键就是，编译器给每个类和每个对象都构建了一个结构。每个类的结构都包含了一个<strong>指向自己父类的指针</strong>，和一个<strong>分发表</strong>。分发表中存放着这个类的每个selector和这个selector对应的过程的入口。</p>
+<p>而当一个继承自<code>NSObject</code>或<code>NSProxy</code>的对象被创建的时候，在对象的变量中，还有一个指向它对应的类结构的指针，这个指针叫做<strong>isa</strong>。所以，当得知receiver时，<code>objc_msgSend</code>方法会通过receiver的isa指针找到它对应的类的结构，并查找这个类的分发表中是否有需要的selector。如果没有找到，则沿着指向父类的指针，去父类的分发表中查找。</p>
+<p>为了加速这个过程，运行时系统会为每个类缓存selector和对应的方法的地址。每个类都有一个这样的cache，其中存放的不仅有它本身的方法，还有它继承的方法。</p>
+<p>如果<code>objc_msgSend</code>方法找到了这个过程，它会调用这个过程，并且传递所有的参数以及两个<strong>隐藏参数</strong>：<strong>receiver</strong>和<strong>selector</strong>。正是因为传递了这两个隐藏参数，程序员才能在OC源代码中使用<code>self</code>和<code>_cmd</code>。</p>
+<p>唯一一个能绕过晚绑定的方式，就是直接得到某个方法的地址，然后像调用函数一样调用它。NSObject中有一个方法<code>methodForSelector:</code>，它可以直接返回对应方法的函数指针。<br>
+注意，在调用这个函数指针的时候，也需要传递receiver和selector的这两个隐藏参数。<br>
+这是苹果的一段示例代码：</p>
+<pre><code>void (*setter)(id, SEL, BOOL);
+int i;
+ 
+setter = (void (*)(id, SEL, BOOL))[target
+    methodForSelector:@selector(setFilled:)];
+for ( i = 0 ; i &lt; 1000 ; i++ )
+    setter(targetList[i], @selector(setFilled:), YES);
+</code></pre>
+<p>那么如果<code>objc_msgSend</code>没有找到对应的方法呢？接下来会有动态方法和消息转发两个机会，就放在下一篇博客里讲吧。</p>
+<hr>
+<p>以上就是基于我的理解大致复述了一下苹果官方文档，而下面是我自己的一些实验和理解。</p>
+<p>#####关于self和_cmd<br>
+我相信是个OC程序员都用过self，因为它是用来指代“当前的对象”的。而_cmd我还是在读这篇文档的时候第一次听说，是“当前这个方法的selector”。<br>
+以前我从来没有考虑过self是从哪里来的，当然更没考虑过_cmd是从哪里来的。但是看完这篇文档后又看了一些blog后，我知道了它们实际上是<code>objc_msgSend</code>方法中，传递给这个方法的函数指针的两个<strong>隐藏参数</strong>。<br>
+既然通过<code>methodForSelector:</code>可以直接得到这个函数指针，那也就是说，程序员也可以自己给这个函数指针传递receiver和selector这两个隐藏参数。<br>
+所以我做了这个实验：</p>
+<pre><code>#import &lt;Foundation/Foundation.h&gt;
+
+@interface XSQObject : NSObject
+
+@end
+
+@implementation XSQObject
+
+- (void)runtimeTest {
+    NSLog(@&quot;self: %@&quot;, [self class]);
+    NSLog(@&quot;_cmd: %@&quot;, NSStringFromSelector(_cmd));
+    NSLog(@&quot;----------------------&quot;);
+}
+
+- (void)randomMethod {
+    NSLog(@&quot;random Method&quot;);
+}
+
+@end
+
+int main(int argc, const char * argv[]) {
+    @autoreleasepool {
+        
+        //正常的发送消息
+        XSQObject *xsqObj = [XSQObject new];
+        [xsqObj runtimeTest];
+        
+        //绕过晚绑定，自己获取函数指针
+        void (*function)(id, SEL) = (void(*)(id, SEL))[xsqObj methodForSelector:@selector(runtimeTest)];
+        NSObject *obj = [NSObject new];
+        function(obj, @selector(randomMethod));
+
+    }
+    return 0;
+}
+</code></pre>
+<p>得到了这样的输出结果：</p>
+<pre><code>2015-04-21 18:19:26.022 XSQRuntimeDemo[2378:303] self: XSQObject
+2015-04-21 18:19:26.024 XSQRuntimeDemo[2378:303] _cmd: runtimeTest
+2015-04-21 18:19:26.024 XSQRuntimeDemo[2378:303] ----------------------
+2015-04-21 18:19:26.025 XSQRuntimeDemo[2378:303] self: NSObject
+2015-04-21 18:19:26.025 XSQRuntimeDemo[2378:303] _cmd: randomMethod
+2015-04-21 18:19:26.025 XSQRuntimeDemo[2378:303] ----------------------
+</code></pre>
+<p>第一次正常的消息发送得到了正常的输出结果，即self的类型就是当前对象的类型，_cmd的名字也是当前方法的名字。而第二次，绕过晚绑定时，self的类型不再是当前对象的类型了，而_cmd的名字也不再是自己方法的名字了。</p>
+<p>这也就验证了，self和_cmd只是形参，只是运行时系统会“恰好”把正确的receiver和正确的selector传递过去。</p>
+<p>知道了self的本质，那么super又是什么呢？看了这篇文章：刨根问底ObjectiveC Runtime（1）觉得好好厉害0.0<br>
+http://chun.tips/blog/2014/11/05/bao-gen-wen-di-objective%5Bnil%5Dc-runtime(1)%5Bnil%5D-self-and-super/</p>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/dui-UIView-dong-hua-he-Core-Animation-de-guan-xi-de-yi-dian-li-jie/">
+              <h3 class="post-title">
+                下一篇：对UIView动画和Core Animation的关系的一点理解
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

@@ -1,0 +1,173 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>使用symbolicatecrash解析了一个crash log | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">使用symbolicatecrash解析了一个crash log</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2016-01-17</span>
+            
+          </div>
+          <div class="post-content">
+            <p>有一天，测试同学给了我一个未经符号化的崩溃日志。如果是以前，我会找到打这个测试包的同事，让他将奔溃日志符号化后发给我。但是这次，我老板傲娇的拒绝了，而是让我自己来做符号化的工作&gt;.&lt;</p>
+<hr>
+<p>###工具和必要文件</p>
+<br>
+上网查了查，我选择了symbolicatecrash工具来符号化这个崩溃日志。这是Xcode自带的一个perl脚本。
+<p>另外，我还需要崩溃日志（测试同学给了我一个.plist文件），测试包对应的.dSYM文件和测试包对应的.app文件。</p>
+<hr>
+<p>###使用symbolicatecrash</p>
+<br>
+在Xcode6.0之后，这个脚本位于
+```
+Xcode.app/Contents/SharedFrameworks/DTDeviceKitBase.framework/Versions/A/Resources/symbolicatecrash
+```
+<p>从它开头的注释中，可以了解到，它会利用Spotlight，通过UUID来搜索需要的.dSYM文件，然后找到对应的可执行文件，然后搜索SDK目录。</p>
+<p>所以我们可以这样把崩溃日志、.dSYM文件和.app文件放到某个目录下，先在命令行中运行：</p>
+<pre><code>export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+</code></pre>
+<p>然后运行symbolicatecrash，比如这样：</p>
+<pre><code>/Applications/Xcode.app/Contents/SharedFrameworks/DTDeviceKitBase.framework/Versions/A/Resources/symbolicatecrash   ~/myCrash/myCrash.plist  &gt; ~/myCrash/myCrash.log
+</code></pre>
+<p>就能在得到符号化之后的崩溃日志了。</p>
+<hr>
+<p>###System framework的符号化</p>
+<br>
+当我按照上面的步骤运行了symbolicatecrash之后，我发现得到的符号化之后的崩溃日志中，只有应用本身被符号化了，UIKit等system framework却没能被符号化。
+可能就是这样（图是stackoverflow上截的）：
+![只有一部分被符号化了的崩溃日志](https://xushuangqing.github.io/post-images/shi-yong-symbolicatecrash-jie-xi-le-yi-ge-crash-log/164542-2af1118d50ab928e.png)
+<p>然而网上的教程都没有提到这种情况(╥﹏╥)</p>
+<p>那让我来想想这是为什么吧。</p>
+<p>如果要让system framework被符号化，那么一定有相关的符号文件存在我电脑的某个地方。它一定会与iOS的版本有关，因为iOS的每次升级，肯定都会有不同的system framework的符号文件。<br>
+查了一下，果然，在<code>~/Library/Developer/Xcode/iOS DeviceSupport/</code>中能看到以iOS版本号命名的一些文件夹。而我需要符号化的崩溃日志，发生在运行着iOS7.0.6的设备上。而我电脑中，这个文件夹里面却没有iOS7.0.6的文件夹。<br>
+想起每当我第一次将某个iOS设备连接到电脑上时，Xcode都会loading一段时间，才能使用这个设备。在loading的阶段，依稀记得Xcode上的提示是“copying symbols”之类的。于是我想，我电脑中的system framework的符号文件，应该就是这样来的。</p>
+<p>所以找测试同学借了发生这个crash的设备，连接到电脑，果然出现了一个新的文件夹。<br>
+<img src="https://xushuangqing.github.io/post-images/shi-yong-symbolicatecrash-jie-xi-le-yi-ge-crash-log/164542-90c6381f25439bca.png" alt="出现了7.0.6文件夹" loading="lazy"></p>
+<p>而当Xcode的loading结束后，再次运行symbolicatecrash，就得到了完整的符号化之后的崩溃日志。</p>
+<hr>
+<p>####参考<br>
+<a href="http://wufawei.com/2014/03/symbolicating-ios-crash-logs/">分析iOS Crash文件：符号化iOS Crash文件的3种方法</a><br>
+<a href="http://stackoverflow.com/questions/8176393/symbolicatecrash-with-xcode-4-2-not-symbolicating-system-symbols">symbolicatecrash with XCode 4.2 not symbolicating system symbols</a></p>
+<hr>
+<p>###2016.01.24更新</p>
+<br>
+可以用这个命令在电脑里找到某个uuid对应的dSYM文件：
+```
+mdfind "com_apple_xcode_dsym_uuids == xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+```
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/cong-NSDictionary-da-yin-bu-chu-zhong-wen-kai-shi/">
+              <h3 class="post-title">
+                下一篇：从NSDictionary打印不出中文开始
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

@@ -1,0 +1,260 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>被无数人写过的assign，retain，strong，weak，unsafe_unretained，还有copy | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">被无数人写过的assign，retain，strong，weak，unsafe_unretained，还有copy</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2015-09-04</span>
+            
+          </div>
+          <div class="post-content">
+            <p>虽然的确是最基本&amp;被无数人写过的问题，但是今天还是想弄得更清楚一些，所以看了看官方文档，写了这篇博客。</p>
+<p>assign，retain，strong，weak，unsafe_unretained，还有copy，这些都是一个property在声明中可以指定的属性，且都与内存管理有关。下面会从Non-ARC和ARC两种情况讨论一下这些属性的意义。</p>
+<hr>
+<p>###Non-ARC</p>
+<br>
+从[官方文档](https://developer.apple.com/library/ios/documentation/Cocoa/Conceptual/MemoryMgmt/Articles/mmPractical.html#//apple_ref/doc/uid/TP40004447-SW1)的描述上看，Non-ARC的内存管理模式下，编译器会为带有不同属性的property自动生成对应的accessor方法。并且苹果十分建议在可能的情况下通过accessor方法来操纵property，而不是操纵它对应的实例变量。
+<p>如果需要对某些property自定义accessor方法，则需要程序员注意这个property的属性。个人认为，写在property旁边的属性，并不是真正控制着这个property的行为，它只是对编译器自动生成的accessor方法提供了指导，当然也为自定义accessor方法的程序员和他的客户程序员提供了指导。</p>
+<ul>
+<li><strong>assign</strong></li>
+</ul>
+<p>在Non-ARC内存管理模式下，assign是一个property的默认属性，无论这个property代表一个简单数据类型，还是一个指向对象的指针。也就是说：</p>
+<pre><code>@property (nonatomic) NSNumber *count;
+</code></pre>
+<p>等价于：</p>
+<pre><code>@property (nonatomic, assign) NSNumber *count;
+</code></pre>
+<p>assign主要应用于代表简单数据类型的property，比如int，float等。<br>
+如果这个用assign属性修饰的property代表一个指向对象的指针，那么当这个指针指向某个对象时，这个对象的引用计数不应该被改变。也就是说，用assign属性修饰的property，不应该持有一个对象。<br>
+因为这个property不持有对象，所以它所指向的对象很可能已经在别处被释放了。这时它就有可能成为一枚悬垂指针，访问它指向的内存地址时，可能会发生意想不到的状况。</p>
+<ul>
+<li><strong>retain</strong></li>
+</ul>
+<p>retain不能修饰用来代表简单数据类型的property，否则编译器会报错：</p>
+<pre><code>@property (nonatomic, retain) int num;//编译器报错：Property with 'retain (or strong)' attribute must be of object type
+</code></pre>
+<p>如果一个property被retain修饰，这代表着这个property应该持有它所指向的对象。<br>
+<a href="https://developer.apple.com/library/ios/documentation/Cocoa/Conceptual/MemoryMgmt/Articles/mmPractical.html#//apple_ref/doc/uid/TP40004447-SW1">官方文档</a>中展示了一个被retain修饰的property：</p>
+<pre><code>@property (nonatomic, retain) NSNumber *count;
+</code></pre>
+<p>编译器可能为它实现的accessor方法：</p>
+<pre><code>- (NSNumber *)count {
+    return _count;
+}
+</code></pre>
+<pre><code>- (void)setCount:(NSNumber *)newCount {
+    [newCount retain];
+    [_count release];
+    // Make the new assignment.
+    _count = newCount;
+}
+</code></pre>
+<p>注意，考虑到newCount和_count可能指向同一个对象，所以在setter方法中，必须首先调用retain，以防这个对象被释放。</p>
+<ul>
+<li><strong>copy</strong></li>
+</ul>
+<p>copy也不能修饰用来代表简单数据类型的property，否则编译器会报错：</p>
+<pre><code>@property (nonatomic, copy) int num;//编译器报错：Property with 'copy' attribute must be of object type
+</code></pre>
+<p>如果一个property被copy修饰，那么赋值到这个property的对象，应该是原有对象的一份拷贝。<br>
+只有实现了NSCopying协议，并且实现了其中的<code>copyWithZone:</code>方法的对象才能被拷贝。<br>
+但是并不是所有的拷贝都产生了新的对象，有些类在实现<code>copyWithZone:</code>方法时，有着它们自己的考虑。比如<code>NSString</code>：</p>
+<pre><code>@property (nonatomic, copy) NSString *myString;
+</code></pre>
+<pre><code>NSString *string = [[NSString alloc] initWithString:@&quot;Hello&quot;];
+self.myString = string;
+NSLog(@&quot;%d&quot;, string == _myString);//输出1
+</code></pre>
+<p>在这里，property的指针和原先的指针指向的是同一个地址。</p>
+<ul>
+<li><strong>unsafe_unretained</strong></li>
+</ul>
+<p>个人认为unsafe_unretained与assign是等价的。</p>
+<ul>
+<li><strong>strong</strong></li>
+</ul>
+<p>个人认为strong与retain是等价的。<br>
+<a href="https://developer.apple.com/library/ios/releasenotes/ObjectiveC/RN-TransitioningToARC/Introduction/Introduction.html">官方文档</a>中有这样的示例代码：</p>
+<pre><code>// The following declaration is a synonym for: @property(retain) MyClass *myObject;
+@property(strong) MyClass *myObject;
+</code></pre>
+<p>表示了strong和retain是同义词。</p>
+<ul>
+<li><strong>weak</strong></li>
+</ul>
+<p>Non-ARC内存管理模式下无法使用weak来修饰一个property，编译器会报错。</p>
+<hr>
+<p>###ARC</p>
+<br>
+ARC有效时，对象类型的变量将有所有权修饰符来修饰。一共有以下四种所有权修饰符：
+```
+__strong 修饰符
+__weak 修饰符
+__unsafe_unretained 修饰符
+__autoreleasing 修饰符
+```
+四种修饰符的具体意思，就不在这里解释了(´･_･`)
+<p>编译器在为一个property合成实例变量时，也会使用所有权修饰符来修饰这个实例变量。根据property属性的不同，用来修饰实例变量的所有权修饰符也不尽相同。</p>
+<ul>
+<li><strong>strong</strong></li>
+</ul>
+<p>在ARC内存管理模式下，strong是一个代表对象类型的property的默认属性，并且它不能修饰用来代表简单数据类型的property。编译器在合成实例变量时，将使用<code>__strong</code>修饰符。<br>
+如果另外自定义了用其他修饰符修饰的实例变量，编译器会报错。可以用这个方法来验证property的各个属性对应的实例变量的所有权修饰符。</p>
+<pre><code>@interface ViewController ()
+{
+    __weak NSObject *_obj;//编译器报错：Existing instance variable '_obj' for strong property 'obj' may not be weak
+}
+
+@property (nonatomic, strong) NSObject *obj;
+
+@end
+</code></pre>
+<ul>
+<li><strong>weak</strong></li>
+</ul>
+<p>weak也不能修饰用来代表简单数据类型的property。<br>
+编译器将为weak修饰的property生成带<code>__weak</code>所有权修饰符的实例变量。</p>
+<ul>
+<li><strong>copy</strong></li>
+</ul>
+<p>copy也不能修饰用来代表简单数据类型的property。<br>
+编译器将为copy修饰的property生成带<code>__strong</code>所有权修饰符的实例变量。<br>
+编译器自动合成的setter方法会调用对象的<code>copyWithZone:</code>方法。虽然第三方程序员可以自定义setter方法，但是为了程序的可读性，也应该在其中执行拷贝的逻辑。</p>
+<ul>
+<li><strong>retain</strong></li>
+</ul>
+<p>和Non-ARC的理由一样，个人认为retain和strong是等价的。</p>
+<ul>
+<li><strong>unsafe_unretained</strong></li>
+</ul>
+<p>编译器将为unsafe_unretained修饰的property生成带<code>__unsafe_unretained</code>所有权修饰符的实例变量。<br>
+与weak和strong不同的是，unsafe_unretained也可以修饰代表简单数据类型的property。</p>
+<ul>
+<li><strong>assign</strong></li>
+</ul>
+<p>个人认为assign和unsafe_unretained等价。<br>
+assign在ARC内存管理模式下，仍然是代表简单数据类型的property的默认属性。</p>
+<hr>
+<p>####参考：<br>
+<a href="https://developer.apple.com/library/ios/releasenotes/ObjectiveC/RN-TransitioningToARC/Introduction/Introduction.html">Transitioning to ARC Release Notes</a><br>
+<a href="https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/MemoryMgmt/Articles/mmPractical.html#//apple_ref/doc/uid/TP40004447">Practical Memory Management</a><br>
+<a href="http://clang.llvm.org/docs/AutomaticReferenceCounting.html">Objective-C Automatic Reference Counting (ARC)</a><br>
+<a href="https://developer.apple.com/library/ios/documentation/General/Conceptual/DevPedia-CocoaCore/ObjectCopying.html">Object copying</a><br>
+<a href="http://item.jd.com/11258970.html">Objective-C高级编程 iOS与OS X多线程和内存管理</a></p>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/shi-yong-UIAppearance-gai-bian-xi-tong-kong-jian/">
+              <h3 class="post-title">
+                下一篇：使用UIAppearance改变系统控件
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

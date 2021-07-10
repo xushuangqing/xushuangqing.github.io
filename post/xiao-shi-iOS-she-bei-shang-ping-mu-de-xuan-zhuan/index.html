@@ -1,0 +1,203 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>小试iOS设备上屏幕的旋转 | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">小试iOS设备上屏幕的旋转</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2015-07-05</span>
+            
+          </div>
+          <div class="post-content">
+            <p>说起来真是惭愧呢，明明是一个超级基本的问题，但是我竟然现在才尝试去接触它，因为之前做的几个app，都是不支持屏幕旋转的啊（可怜脸）<br>
+不过没关系啦，小试一下就又涨了一个姿势。</p>
+<p>顺便，从现在开始，我要用Swift来写代码片段了。以及这里写的内容都是针对iOS6以后的。</p>
+<hr>
+<p>####设备的旋转方向和屏幕的旋转方向</p>
+<br>
+觉得最重要的事情，就是知道Device Orientation（设备的旋转方向）和Interface Orientation（屏幕的旋转方向）是两个不同的概念。前者只是代表了设备的一种状态，而后者是屏幕为了应对不同的设备状态，做出的用户界面上的回应。
+<hr>
+<p>####设备的旋转方向</p>
+<br>
+Device Orientation表示的是这个iOS设备的旋转方向。除了Unknown之外，它有6个值（每个维度两个方向），定义在UIDevice这个类中：
+```
+enum UIDeviceOrientation : Int {
+    case Unknown
+    case Portrait // Device oriented vertically, home button on the bottom
+    case PortraitUpsideDown // Device oriented vertically, home button on the top
+    case LandscapeLeft // Device oriented horizontally, home button on the right
+    case LandscapeRight // Device oriented horizontally, home button on the left
+    case FaceUp // Device oriented flat, face up
+    case FaceDown // Device oriented flat, face down
+}
+```
+既然是定义在UIDevice中的，也就是说明，Device Orientation是设备的一种状态，与当前运行着哪个app没有什么关系，与屏幕也没有什么关系。
+<p>每当设备被旋转的时候，系统会发送<code>UIDeviceOrientationDidChangeNotification</code>通知，让有需要的app得知设备旋转的消息。使用以下代码就可以查询设备当前的旋转方向了：</p>
+<pre><code>println(&quot;Device Orientation \(UIDevice.currentDevice().orientation.rawValue)&quot;)
+</code></pre>
+<p>无论运行着的app的屏幕会不会旋转，只要整个设备旋转，它就会收到这个通知。</p>
+<p>不过，在iOS的控制中心，可以关闭设备旋转的开关。这个开关关闭后，app将不能正确的收到<code>UIDeviceOrientationDidChangeNotification</code>通知（app启动的时候可以收到一次，但是之后旋转设备，这个通知就不能被收到了）。</p>
+<hr>
+<p>####屏幕的旋转方向</p>
+<br>
+Interface Orientation代表的则是用户界面的旋转方向。比如iOS8的照片应用，在设备旋转时，其中view的布局也会跟着变化。
+<p>除了Unknown，Interface Orientation有4个值：</p>
+<pre><code>enum UIInterfaceOrientation : Int {
+    case Unknown
+    case Portrait
+    case PortraitUpsideDown
+    case LandscapeLeft
+    case LandscapeRight
+}
+</code></pre>
+<p>可以发现，它没有与UIDeviceOrientation中的FaceUp和FaceDown对应的值，对啊，当手机面朝上或者面朝下的时候，用户界面如果要变化，那应该是一件很奇怪的事情。</p>
+<p>另外，<code>UIInterfaceOrientation</code>中的<code>LandscapeLeft</code>等价于<code>UIDeviceOrientation</code>中的<code>LandscapeRight</code>，反之亦然。那是因为，当设备向右旋转时，用户界面中的内容应该是向左旋转，才能呈现正确的方向。</p>
+<p>通过查询</p>
+<pre><code>UIApplication.sharedApplication().statusBarOrientation
+</code></pre>
+<p>可以获取状态栏的方向，也就是当前用户界面的方向。</p>
+<p>并不是所有的app都会对设备旋转做出用户界面上对应的旋转。所以，程序员也不能通过查询设备的当前方向，来推断用户界面的方向；也不能通过查询用户界面的方向，来推断设备的方向。Device Orientation和Interface Orientation是两个不同的概念。</p>
+<p>在一个app中，可以直接指定整个app支持的旋转方向；也可以对每个容器controller指定其支持的旋转方向：</p>
+<p>######App层面的屏幕旋转<br>
+<br><br>
+可以在Xcode project的general这个标签下，设置app支持的屏幕旋转方向。<br>
+<img src="https://xushuangqing.github.io/post-images/xiao-shi-iOS-she-bei-shang-ping-mu-de-xuan-zhuan/164542-0d8fd5fd0f42dbbc.png" alt="设置app支持的屏幕旋转方向" loading="lazy"></p>
+<p>也可以在info.plist文件中设置Supported interface orientations。<br>
+<img src="https://xushuangqing.github.io/post-images/xiao-shi-iOS-she-bei-shang-ping-mu-de-xuan-zhuan/164542-58b0b6fb838d7028.png" alt="设置plist文件" loading="lazy"></p>
+<p>######容器controller层面的旋转<br>
+<br><br>
+在view controller中，可以通过重写<code>supportedInterfaceOrientations</code>方法指定支持的旋转方向：</p>
+<pre><code>override func supportedInterfaceOrientations() -&gt; Int {
+    return UIInterfaceOrientation.Portrait.rawValue
+}
+</code></pre>
+<p>也可以通过重写<code>shouldAutorotate</code>方法，判断每次可能旋转是否应该完成：</p>
+<pre><code>override func shouldAutorotate() -&gt; Bool {
+    return true
+}
+</code></pre>
+<p>只有已经被支持的旋转方向才会调用<code>shouldAutorotate</code>这个方法。也就是说，这个view controller真正支持的旋转方向，是<code>supportedInterfaceOrientations</code>中指定的方向和<code>shouldAutorotate</code>中返回为true的情况的相与。</p>
+<p>在一个app的每个view controller中，可以分别指定当前view controller支持的旋转方向。但是这里所指的view controller，必须是root view controller或者全屏的view controller，不然相关方法是不会被调用的。</p>
+<p>所以说，如果这个view controller是被包含在navigation controller或者tab bar controller中的时候，被包含的view controller的<code>supportedInterfaceOrientation</code>方法是不会被调用的。这时需要程序员自己来handle这个情况。</p>
+<hr>
+<p>####参考</p>
+<br>
+[Supporting Multiple Interface Orientations](https://developer.apple.com/library/ios/featuredarticles/ViewControllerPGforiPhoneOS/RespondingtoDeviceOrientationChanges/RespondingtoDeviceOrientationChanges.html)
+[iOS的横屏(Landscape)与竖屏(Portrait)InterfaceOrientation](http://www.molotang.com/articles/1530.html)
+[iOS6的旋屏控制技巧](http://blog.csdn.net/yiyaaixuexi/article/details/8035014)
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/di-san-bian-kan-Core-Data-Programming-Guide/">
+              <h3 class="post-title">
+                下一篇：第三遍看Core Data Programming Guide
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

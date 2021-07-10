@@ -1,0 +1,251 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>FBRetainCycleDetector遇到NSMapTable的crash---从发现到PR | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">FBRetainCycleDetector遇到NSMapTable的crash---从发现到PR</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2019-07-17</span>
+            
+          </div>
+          <div class="post-content">
+            <p>自从项目接入了 MLeaksFinder + FBRetainCycleDetector 的内存泄漏检测方案，在收获了许多有效内存泄漏的同时，我们也收获了两个 FBRetainCycleDetector 的 crash。</p>
+<p>首先抛出这两个 crash 的调用栈：</p>
+<p>问题1：</p>
+<pre><code>Crashed: com.mapp.cycleDetector
+0  libobjc.A.dylib                0x1903be058 objc_retain + 8
+1  MAppInHouse                    0x10594e1ac FBWrapObjectGraphElement + 64 (FBRetainCycleUtils.m:64)
+2  MAppInHouse                    0x10594c324 -[FBObjectiveCObject allRetainedObjects] + 83 (FBObjectiveCObject.m:83)
+3  MAppInHouse                    0x10594a868 -[FBNodeEnumerator nextObject] + 34 (FBNodeEnumerator.mm:34)
+4  MAppInHouse                    0x10594d0a8 -[FBRetainCycleDetector _findRetainCyclesInObject:stackDepth:] + 132 (FBRetainCycleDetector.mm:132)
+5  MAppInHouse                    0x10594caac -[FBRetainCycleDetector findRetainCyclesWithMaxCycleLength:] + 65 (FBRetainCycleDetector.mm:65)
+6  MAppInHouse                    0x1061c4174 __55-[NSObject(MemoryLeak) checkRetainCycleWithCompletion:]_block_invoke.165 + 256 (NSObject+MemoryLeak.m:256)
+7  libdispatch.dylib              0x190348678 _dispatch_call_block_and_release + 24
+8  libdispatch.dylib              0x1903491ec _dispatch_client_callout + 16
+9  libdispatch.dylib              0x19032675c _dispatch_lane_serial_drain$VARIANT$armv81 + 564
+10 libdispatch.dylib              0x190327178 _dispatch_lane_invoke$VARIANT$armv81 + 404
+11 libdispatch.dylib              0x1903304bc _dispatch_workloop_worker_thread + 576
+12 libsystem_pthread.dylib        0x190398f5c _pthread_wqthread + 304
+13 libsystem_pthread.dylib        0x19039baa0 start_wqthread + 8
+</code></pre>
+<p>问题2：</p>
+<pre><code>Crashed: com.mapp.cycleDetector
+0  CoreFoundation                 0x21f4c37e0 ___forwarding___ + 1448
+1  CoreFoundation                 0x21f4c546c _CF_forwarding_prep_0 + 92
+2  MAppInHouse                    0x1018e70d4 FBWrapObjectGraphElementWithContext + 43 (FBRetainCycleUtils.m:43)
+3  MAppInHouse                    0x1018e72f4 FBWrapObjectGraphElement + 65 (FBRetainCycleUtils.m:65)
+4  MAppInHouse                    0x1018e5454 -[FBObjectiveCObject allRetainedObjects] + 83 (FBObjectiveCObject.m:83)
+5  MAppInHouse                    0x1018e3998 -[FBNodeEnumerator nextObject] + 34 (FBNodeEnumerator.mm:34)
+6  MAppInHouse                    0x1018e61d8 -[FBRetainCycleDetector _findRetainCyclesInObject:stackDepth:] + 132 (FBRetainCycleDetector.mm:132)
+7  MAppInHouse                    0x1018e5bdc -[FBRetainCycleDetector findRetainCyclesWithMaxCycleLength:] + 65 (FBRetainCycleDetector.mm:65)
+8  MAppInHouse                    0x10215d2a4 __55-[NSObject(MemoryLeak) checkRetainCycleWithCompletion:]_block_invoke.165 + 256 (NSObject+MemoryLeak.m:256)
+9  libdispatch.dylib              0x21eef56c8 _dispatch_call_block_and_release + 24
+10 libdispatch.dylib              0x21eef6484 _dispatch_client_callout + 16
+11 libdispatch.dylib              0x21eed0fa0 _dispatch_lane_serial_drain$VARIANT$armv81 + 548
+12 libdispatch.dylib              0x21eed1ae4 _dispatch_lane_invoke$VARIANT$armv81 + 412
+13 libdispatch.dylib              0x21eed9f04 _dispatch_workloop_worker_thread + 584
+14 libsystem_pthread.dylib        0x21f0d90dc _pthread_wqthread + 312
+15 libsystem_pthread.dylib        0x21f0dbcec start_wqthread + 4
+</code></pre>
+<p>FBRetainCycleDetector 是 facebook 出品的寻找循环引用的工具。简单来说，它通过<code>class_copyIvarList</code>获取一个类的实例变量列表，使用<code>class_getIvarLayout</code>判定是实例变量是否为强引用，然后使用有向图中找环的算法，获取循环引用的引用环。</p>
+<p>光从调用栈上来看，我们对这一问题没有头绪。首先，这两个 crash 并非必现；其次，从崩溃用户的行为上看，也没有发现共性。</p>
+<p>作为一个 facebook 出品，经过了多年验证的三方库，我们判断这两个 crash 并非一般的代码逻辑问题。解决这两个问题看起来会是一个挑战。</p>
+<h2 id="错误的判断">错误的判断</h2>
+<p>一开始我们以为问题 1 是一个多线程的问题，因为 FBRetainCycleDetector 有一段注释，表明它的确可能存在多线程问题，只是用 try catch 尝试缩小它的影响。</p>
+<p>同时，问题 1 的调用栈中，的确有多个线程在进行找环操作。</p>
+<figure data-type="image" tabindex="1"><img src="https://xushuangqing.github.io/post-images/FBRetainCycleDetector-yu-dao-NSMapTable-de-crash----cong-fa-xian-dao-PR/164542-9092e8bf9d3cf455.png" alt="" loading="lazy"></figure>
+<p>我们曾尝试通过将并发队列改为串行队列的方式修复问题1，但是并未修好。</p>
+<h2 id="线索">线索</h2>
+<h3 id="来自-github-issue">来自 github issue</h3>
+<p>遇到疑难问题，特别是开源库的问题，我们迅速反应出，去网络上尝试寻找解决方案。</p>
+<figure data-type="image" tabindex="2"><img src="https://xushuangqing.github.io/post-images/FBRetainCycleDetector-yu-dao-NSMapTable-de-crash----cong-fa-xian-dao-PR/164542-0d2625ceee51df99.png" alt="" loading="lazy"></figure>
+<p>https://github.com/facebook/FBRetainCycleDetector/issues/60#issuecomment-503511056</p>
+<p>从 FBRetainCycleDetector 的 github issue 上，我们发现了一个与问题1类似的问题描述。其中，提问者提到，这是遍历 NSMapTable 时遇到的。</p>
+<p>NSMapTable 是我们获得的第一个线索。</p>
+<h3 id="一次偶然的复现">一次偶然的复现</h3>
+<p>同时，我们在调试时，也偶然复现了一次问题2。这次复现给了我们关键的信息。</p>
+<figure data-type="image" tabindex="3"><img src="https://xushuangqing.github.io/post-images/FBRetainCycleDetector-yu-dao-NSMapTable-de-crash----cong-fa-xian-dao-PR/164542-fe13cdd2a8854a41.png" alt="" loading="lazy"></figure>
+<p>当时的现场是，正在找环过程中的object对象变成了一个指向0xffffffffffffffff地址的指针，而这个指针通过object_getClass竟然能取到对应的类，对应的类是<code>__NSAtom</code>。</p>
+<p><code>__NSAtom</code>显然是一个私有类，而且它不继承自<code>NSObject</code>，没有<code>isSubclassOfClass:</code>方法，所以执行到这里的时候，触发消息转发最后<code>EXC_BREAKPOINT</code>了。</p>
+<p>此时，我们想到了一个最简单的修复方式：在这里绕过<code>isSubclassOfClass:</code>方法，使用 runtime 的 API <code>class_getSuperclass</code> 来达到判断是否是子类的目的。</p>
+<figure data-type="image" tabindex="4"><img src="https://xushuangqing.github.io/post-images/FBRetainCycleDetector-yu-dao-NSMapTable-de-crash----cong-fa-xian-dao-PR/164542-5c074d2f3b45a655.png" alt="" loading="lazy"></figure>
+<p>但是，不查明这个0xffffffffffffffff的由来，只修复问题的表面，也让我们心虚。0xffffffffffffffff显然是一个不符合预期的地址，而随意访问这种地址，可能会引爆更大的雷。</p>
+<p>所以，我们不得不对这个问题做更多分析。</p>
+<h2 id="稳定复现">稳定复现</h2>
+<p>刚才的线索中，我们得到了两个重要信息：</p>
+<ol>
+<li>NSMapTable 是问题的来源</li>
+<li>一个莫名其妙的数被当成了对象的地址</li>
+</ol>
+<p>已知的是，NSMapTable 作为一个功能更强大的容器，不仅仅可以存放对象，还能存放一个简单的数字。所以，我们尝试用 NSMapTable 来稳定复现问题2。</p>
+<p>复现的方式其实很简单。</p>
+<p>创建一个NSPointerFunctionsOpaqueMemory类型的容器，往容器里塞入 -1 这个数，也就是 0xffffffffffffffff，然后让这个容器被找环算法遍历到。</p>
+<pre><code>xsqView.table = [[NSMapTable alloc] initWithKeyOptions:NSPointerFunctionsOpaqueMemory | NSPointerFunctionsIntegerPersonality valueOptions:0 capacity:0];
+NSInteger i = -1;
+[xsqView.table setObject:@&quot;hahaha&quot; forKey:(__bridge id)((void *)i)];
+</code></pre>
+<p>问题2被复现了出来。</p>
+<p>而将这个数从 -1 改到 1，我们发现问题1也成了必现。</p>
+<p>问题1和问题2，预期是同一个本质问题引起的。</p>
+<h2 id="分析问题1">分析问题1</h2>
+<p>稳定复现后，问题1的分析变得顺利了起来。</p>
+<p>数字 “1” 被 FBRetainCycleDetector 遍历到的时候，FBRetainCycleDetector 使用了__strong 的 id 类型修饰它，导致运行时被调用了 <code>_objc_retain</code>，因此导致了 BAD ACCESS。</p>
+<figure data-type="image" tabindex="5"><img src="https://xushuangqing.github.io/post-images/FBRetainCycleDetector-yu-dao-NSMapTable-de-crash----cong-fa-xian-dao-PR/164542-20f6acf2f331d987.png" alt="" loading="lazy"></figure>
+<p>如果将这里的 id ，和 FBWrapObjectGraphElement 函数参数中的 id，都修改为 __unsafe_unretained id，这个 crash 堆栈立马变到了下一处对数字 “1” 进行强引用的地方。</p>
+<p>所以问题1的本质原因被找到且证明了。FBRetainCycleDetector 并没有考虑到  NSPointerFunctionsOpaqueMemory 类型的容器，将容器内的元素都当作了对象来对待导致了问题1。</p>
+<h2 id="分析问题2">分析问题2</h2>
+<p>问题1的分析比较容易。但为什么将数字 &quot;1&quot; 改成 &quot;-1&quot; 后，问题1中 BAD ACCESS 的代码被顺利走过了，crash 堆栈变成了问题2呢？</p>
+<p>搜索了一些资料，发现这是 tagged pointer 搞的鬼。</p>
+<p>简单说，计算机中有内存对齐的说法，因此正常的指针，在 64 位设备上，最后 4 bit 必然是0。如果最后 4 bit 不是 0，说明这不是一个正常的指针。这个特性被苹果用于了tagged pointer。</p>
+<p>（ http://www.phrack.org/issues/69/9.html 我从这篇博客里了解了一下tagged pointer）</p>
+<p>由于一个对象的结构体中的第一个成员是 isa 指针，因此，如果 0xffffffffffffffff 被当作了一个对象，那么它实际也被当作了一个 isa 指针的值。而显然，这个 isa 指针还是个 tagged pointer。</p>
+<p>如果一个 isa 指针是一个 tagged pointer 的话，它找到的 Class 的过程中会经历一个映射。经过映射，它最后可以被翻译为某一个属于 TaggerPointer 的类，比如 __NSAtom。所以，就出现了问题 2 中的崩溃栈。</p>
+<p>（我们可以从开源的runtime代码中了解映射的过程https://opensource.apple.com/source/objc4/objc4-551.1/runtime/objc-private.h）</p>
+<h2 id="问题根源">问题根源</h2>
+<p>其实，通过分析 FBRetainCycleDetector 的找环逻辑，我们会发现，这些 “数字” 本来就不应该被遍历到。</p>
+<p>因为存储了 NSPointerFunctionsOpaqueMemory 元素的容器，容器持有容器内元素的关系，并不是强引用。</p>
+<p>FBRetainCycleDetector 其实也考虑到了这点，它有一个方法来判断容器是不是强引用：<br>
+<img src="https://xushuangqing.github.io/post-images/FBRetainCycleDetector-yu-dao-NSMapTable-de-crash----cong-fa-xian-dao-PR/164542-fa811bfba0d7cc84.png" alt="" loading="lazy"></p>
+<p>但是对于 NSPointerFunctionsOpaqueMemory 的容器，usesWeakReadAndWriteBarriers 属性返回的是 NO，所以被误判成了强引用。</p>
+<h2 id="解决">解决</h2>
+<p>NSPointerFunctions 没有开放接口判断它的 option 是什么。看起来我们无法分辨出 NSPointerFunctions 与元素的引用关系。但是在分析了 NSPointerFunctions 的接口文档后，我们发现了一个 trick 但合理的方案，就是利用它的 acquireFunction 属性。</p>
+<p>官方文档是这样描述 acquireFunction 属性的。</p>
+<blockquote>
+<p>The function used to acquire memory.</p>
+</blockquote>
+<blockquote>
+<p>This specifies the function to use for copy-in operations.</p>
+</blockquote>
+<p>这个属性是一个函数指针，当一个值被存入容器时，会调用这个函数，按需去 retain 这个即将被存入容器的元素。</p>
+<p>我们做了个实验了。如果 option 是 NSPointerFunctionsStrongMemory，则这个 acquireFunction 是系统提供的函数，如果 option 是 NSPointerFunctionsOpaqueMemory，这个 acquireFunction 是空。</p>
+<figure data-type="image" tabindex="6"><img src="https://xushuangqing.github.io/post-images/FBRetainCycleDetector-yu-dao-NSMapTable-de-crash----cong-fa-xian-dao-PR/164542-0ac169e262de6f44.png" alt="" loading="lazy"></figure>
+<p>这个结果很好理解，也符合正常程序员的设计思路，当容器不想对存入的值做内存上的操作，什么也不干就行了。</p>
+<p>所以我们可以推断，如果 acquireFunction 为空，说明这个容器并不会对元素的引用计数去 +1，这说明对元素的引用关系，并非是强引用。</p>
+<p>当然这个论断反过来并不能推定。</p>
+<p>所以我们可以在 FBRetainCycleDetector 的逻辑里加一个判断：</p>
+<p>当容器的 NSPointerFunctions 的 acquireFunction 为空时，至少能说明它不会强引用存储的元素。可以直接放弃遍历其内部的元素。</p>
+<h2 id="验证">验证</h2>
+<p>我们已经通过获取 acquireFunction 达成了如上推断，为了进一步验证，我们用 Hopper 查看了逆向出来的伪代码，发现至少在 iOS 12.3.1 上，我们的推测是正确的。</p>
+<p>我们不能保证 NSPointerFunctionsOpaqueMemory 的容器的 acquireFunction 在任何版本的 iOS 上都是空，但是增加对 acquireFunction 的判断好过什么也不做。</p>
+<h2 id="提交">提交</h2>
+<p>这个修复被首先提交到了项目中进行验证。证明修复有效后，我们给开源的 FBRetainCycleDetector 提交了同样的修复：</p>
+<p>https://github.com/facebook/FBRetainCycleDetector/pull/79</p>
+<p>同时在 FBRetainCycleDetector 的单元测试里增加了必现问题1的case。</p>
+<h2 id="总结">总结</h2>
+<p>在这个问题发现的初期，我抱着绝望的态度，认为开源库中的 crash 必然难解。但是事实证明，通过收集线索、耐心分析问题、制造必现场景、理解 root cause、大胆假设小心验证，问题依然是有机会解决的。</p>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/shi-chui-zheng-ming-Fabric-OOM-free-session-de-wu-bao/">
+              <h3 class="post-title">
+                下一篇：实锤证明Fabric OOM free session的误报
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

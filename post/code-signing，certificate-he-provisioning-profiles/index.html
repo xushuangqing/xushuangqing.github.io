@@ -1,0 +1,180 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>code signing，certificate和provisioning-profiles | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">code signing，certificate和provisioning-profiles</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2016-04-10</span>
+            
+          </div>
+          <div class="post-content">
+            <p>虽然从开始做iOS开发到现在，已经被苹果开发者的这些事折磨过无数次，但是我这个懒人每次都是通过瞎点“Fix issue”和“向老板求助”来解决问题的。然而最近经过了一些人事变动，外加秉承着三分钟热度的新年新气象，还是把这个大问题弄懂解决一下吧(╥﹏╥)</p>
+<p>以下基本上摘取翻译自苹果官方文档。这些内容分散在好几个文档中，只是按照个人觉得易于理解的方式组织了一下。</p>
+<hr>
+<p>###为什么要做是代码签名（code signing）</p>
+<br>
+数字签名（digital signature）使用了非对称加密的技术来确保数据是真实可靠的。加密者对一段数据做哈希后，使用自己的私钥对哈希值进行加密，这个加密后的哈希值就被称作“签名”。
+为了检验这个签名，检验者首先计算出他得到的数据的哈希值，然后使用公钥对签名进行解密，这样就得到了加密者计算出的哈希值，如果两个哈希值一致，则说明这段数据自从签名后就没有被篡改过。
+<p>对app做代码签名可以让用户相信，这个app来源于苹果认证过的渠道，并且没有被第三方篡改。</p>
+<p>被签名的app中包含了多个数字签名，对代码本身的签名会存在二进制文件自身中，对app中其他组成部分（比如Info.plist文件）的签名则存在<code>_CodeSignature/CodeResources</code>中。</p>
+<p>app既可以被签名，也可以被抹去签名并且重新签名。比如说，开发者在上传至iTunes Connect之前对app做了签名，而苹果则在将app发布给顾客之前对它重新做了一次签名。</p>
+<hr>
+<p>###证书</p>
+<br>
+Xcode用开发者的signing identity在构建的过程中对app做签名。这个signing identity包含了一对由苹果发行的公钥和私钥。私钥存在开发者的Mac的keychain中，而开发者帐号中的证书则存储了对应的公钥。
+Xcode可以帮开发者生成signing identity，并且将其添加到开发者Mac的keychain中，同时对应的证书也被添加到开发者帐号的Member Center中。
+<figure data-type="image" tabindex="1"><img src="https://xushuangqing.github.io/post-images/code-signing%EF%BC%8Ccertificate-he-provisioning-profiles/164542-e754c9bfb1b5f365.png" alt="证书中只包含公钥，并且被上传到了Member Center" loading="lazy"></figure>
+<p>私钥只保存在Mac本地，所以对开发者来说，保存这个私钥是很重要的。如果私钥丢失了，开发者就必须创建一个全新的signing identity。而更糟糕的是，如果有个人窃取了开发者的私钥，这个人就可以伪装成开发者。</p>
+<figure data-type="image" tabindex="2"><img src="http://upload-images.jianshu.io/upload_images/164542-af554ab0c8564bb0.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240" alt="keychain中的证书和私钥，图片来源" loading="lazy"></figure>
+<p>另外，一个intermediate certificate也需要被放在keychain中，来保证开发者的证书是由certificate authority发行的。当开发者安装Xcode时，苹果的intermediate certificate就自动被添加到开发者的keychain中了。</p>
+<p>不同的目的使用不同的证书。一个development certificate认证了团队中的一个成员，可以用来运行这个app。一个distribution certificate认证了一个团队，用来发布这个app。</p>
+<p>任何一个团队成员都可以创建development certificate，但是只有agent或者admin可以创建distribution certificate。</p>
+<hr>
+<p>###Provisioning Profiles</p>
+<br>
+通过检查一个provisioning profile的包含的信息，操作系统可以决定是否应该运行这个app。Xcode会将开发者选择的provisioning profile嵌入到app中去。
+<p>#####Development Provisioning Profiles</p>
+<br>
+Team provisioning profile是一种典型的development provisioning profile。一个team provisioning profile文件允许这个团队开发的任意app，被任意一个团队成员签名，也可以在任意一个被团队注册的设备上运行。
+<p>Team provisioning profile是由Xcode来管理的。Xcode会在开发者第一次将一个Xcode工程指定一个team或者第一次为app添加capabilities的时候自动创建一个team provisioning profile。</p>
+<p>一个team provisioning profile包含了一个App ID（可以是wildcard App ID，也可以是explicit App ID），所有和团队相关的设备，以及所有和团队相关的development certificate。</p>
+<figure data-type="image" tabindex="3"><img src="https://xushuangqing.github.io/post-images/code-signing%EF%BC%8Ccertificate-he-provisioning-profiles/164542-3ce023b180893a73.png" alt="" loading="lazy"></figure>
+<p>由于Xcode会自动创建和管理一个team provisioning profile，所以一般来说，只有当开发者想要限制只能有一部分团队成员才能开发某个app时，才会需要手动创建一个development provisioning profile。</p>
+<p>#####Distribution Provisioning Profiles</p>
+<br>
+一个ad hoc provisioning profile是一个distribution provisioning profile。它允许开发者的app被安装到指定的若干设备上，这个过程可以不经过Xcode。一个ad hoc provisioning profile可以防止app的测试版在开发者不知情的情况下被复制和发布。
+<p>当开发者准备好将app发布给测试时，他可以用一个App ID、一系列测试设备编号和一个发布证书来创建一个ad hoc provisioning profile。</p>
+<p>在使用ad hoc provisioning profile时，这个iOS app是使用这个ad hoc provisioning profile中的发布证书来签名的。当开发者build或者archive这个app时，这个provisioning profile会被包含到app bundle中。如果这个app的bundle ID和App ID匹配、app的签名和发布证书匹配、当前的设备在这个provisioning profile的设备列表中，则这个app可以成功启动。</p>
+<figure data-type="image" tabindex="4"><img src="https://xushuangqing.github.io/post-images/code-signing%EF%BC%8Ccertificate-he-provisioning-profiles/164542-7a2b334994b07ae1.png" alt="ad hoc provisioning profile的构成" loading="lazy"></figure>
+<figure data-type="image" tabindex="5"><img src="https://xushuangqing.github.io/post-images/code-signing%EF%BC%8Ccertificate-he-provisioning-profiles/164542-5023a6cd31cfb3a4.png" alt="只有当这些匹配时，app才能在设备上启动" loading="lazy"></figure>
+<p>当开发者输出一个app存档（app archive）并且选择ad hoc选项时，Xcode会创建一个ad hoc provisioning profile。</p>
+<p>类似的，当开发者提交一个app到app store时，Xcode会创建一个store provisioning profile。</p>
+<p>一个store provisioning profile包含了一个app ID和一个发布证书。当开发者将app上传到store的时候，Xcode会用store provisioning profile中的发布证书为app签名。</p>
+<figure data-type="image" tabindex="6"><img src="https://xushuangqing.github.io/post-images/code-signing%EF%BC%8Ccertificate-he-provisioning-profiles/164542-f7ee135567678abb.png" alt="不知道为什么这里写的是Development Certificate，难道苹果写错了？" loading="lazy"></figure>
+<hr>
+<p>####参考</p>
+<p><a href="https://www.objc.io/issues/17-security/inside-code-signing/">Inside Code Signing</a><br>
+<a href="https://developer.apple.com/library/mac/documentation/Security/Conceptual/CodeSigningGuide/AboutCS/AboutCS.html#//apple_ref/doc/uid/TP40005929-CH3-SW3">Code Signing Overview</a><br>
+<a href="https://developer.apple.com/library/ios/documentation/IDEs/Conceptual/AppDistributionGuide/MaintainingCertificates/MaintainingCertificates.html#//apple_ref/doc/uid/TP40012582-CH31-SW2">About Signing Identities and Certificates</a><br>
+<a href="https://developer.apple.com/library/ios/documentation/IDEs/Conceptual/AppDistributionGuide/MaintainingCertificates/MaintainingCertificates.html#//apple_ref/doc/uid/TP40012582-CH31-SW41">Your Signing Certificates in Depth</a><br>
+<a href="https://developer.apple.com/library/ios/documentation/IDEs/Conceptual/AppDistributionGuide/LaunchingYourApponDevices/LaunchingYourApponDevices.html#//apple_ref/doc/uid/TP40012582-CH27-SW10">Team Provisioning Profiles in Depth</a><br>
+<a href="https://developer.apple.com/library/ios/documentation/IDEs/Conceptual/AppDistributionGuide/TestingYouriOSApp/TestingYouriOSApp.html#//apple_ref/doc/uid/TP40012582-CH8-SW21">About Ad Hoc Provisioning Profiles</a><br>
+<a href="https://developer.apple.com/library/ios/documentation/IDEs/Conceptual/AppDistributionGuide/UploadingYourApptoiTunesConnect/UploadingYourApptoiTunesConnect.html#//apple_ref/doc/uid/TP40012582-CH36-SW3">About Store Provisioning Profiles</a><br>
+<a href="https://developer.apple.com/library/ios/documentation/IDEs/Conceptual/AppDistributionGuide/MaintainingProfiles/MaintainingProfiles.html#//apple_ref/doc/uid/TP40012582-CH30-SW24">Creating Provisioning Profiles Using Member Center</a></p>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/ARC-xia-de-autorelease/">
+              <h3 class="post-title">
+                下一篇：ARC下的autorelease
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

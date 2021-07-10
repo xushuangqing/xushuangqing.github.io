@@ -1,0 +1,215 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>无脑在block中用weakSelf的教训(╥﹏╥) | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">无脑在block中用weakSelf的教训(╥﹏╥)</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2016-01-31</span>
+            
+          </div>
+          <div class="post-content">
+            <p>不知道从什么时候开始，我的脑子里就有一个印象：“在block中用self容易造成retain cycle，虽然有时候编译器会警告但也不能保证编译器每次都发现retain cycle，所以保险起见还是每次都用weakSelf好了(￣▽￣)”</p>
+<p>果然这种无脑的想法会出问题(╥﹏╥)。</p>
+<p>ps.这篇好水，因为原理什么的书里看了，但还没理解透彻到可以写出来&gt;.&lt;</p>
+<hr>
+<p>###崩溃</p>
+<br>
+因为最近在做的项目中，还有一些很久以前留下来的，用MRC内存管理方式的代码。我给其中一个文件加上了类似这样的两个方法：
+```
+//MRC
+<ul>
+<li>
+<p>(void)alarmLater {<br>
+    __block typeof(self) weakSelf = self;<br>
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{<br>
+        [weakSelf alarm];<br>
+    });<br>
+}</p>
+</li>
+<li>
+<p>(void)alarm {<br>
+    NSLog(@&quot;Hello World!&quot;);<br>
+}</p>
+</li>
+</ul>
+<pre><code>
+因为习惯了无脑用weakSelf。MRC中，```__block```修饰符可以避免block对self对象的retain，所以我就这么写了。
+
+然而运行的结果是，崩溃(╥﹏╥)
+</code></pre>
+<ul>
+<li>thread #1: tid = 0x22796c, 0x00000001060de80b libobjc.A.dylib<code>objc_msgSend + 11, queue = 'com.apple.main-thread', stop reason = EXC_BAD_ACCESS (code=EXC_I386_GPFLT)     frame #0: 0x00000001060de80b libobjc.A.dylib</code>objc_msgSend + 11<br>
+  * frame #1: 0x0000000105bcaaee XSQBlockCrashDemo<code>__27-[XSQLaterAlarm alarmLater]_block_invoke(.block_descriptor=&lt;unavailable&gt;) + 46 at XSQLaterAlarm.m:17     frame #2: 0x0000000108d36e5d libdispatch.dylib</code>_dispatch_call_block_and_release + 12<br>
+    frame #3: 0x0000000108d5749b libdispatch.dylib<code>_dispatch_client_callout + 8     frame #4: 0x0000000108d3c746 libdispatch.dylib</code>_dispatch_after_timer_callback + 334<br>
+    frame #5: 0x0000000108d5749b libdispatch.dylib<code>_dispatch_client_callout + 8     frame #6: 0x0000000108d4a8a5 libdispatch.dylib</code>_dispatch_source_latch_and_call + 1750<br>
+    frame #7: 0x0000000108d45830 libdispatch.dylib<code>_dispatch_source_invoke + 1057     frame #8: 0x0000000108d3f111 libdispatch.dylib</code>_dispatch_main_queue_callback_4CF + 1324<br>
+    frame #9: 0x00000001065afd09 CoreFoundation<code>__CFRUNLOOP_IS_SERVICING_THE_MAIN_DISPATCH_QUEUE__ + 9     frame #10: 0x00000001065712c9 CoreFoundation</code>__CFRunLoopRun + 2073<br>
+    frame #11: 0x0000000106570828 CoreFoundation<code>CFRunLoopRunSpecific + 488     frame #12: 0x0000000109e09ad2 GraphicsServices</code>GSEventRunModal + 161<br>
+    frame #13: 0x00000001069fc610 UIKit<code>UIApplicationMain + 171     frame #14: 0x0000000105bca94f XSQBlockCrashDemo</code>main(argc=1, argv=0x00007fff5a035650) + 111 at main.m:14<br>
+    frame #15: 0x0000000108d8b92d libdyld.dylib`start + 1</li>
+</ul>
+<pre><code>
+这是因为，当block中调用到```[weakSelf alarm]```的时候，self已经被回收，这句话相当于访问了一个悬垂指针，导致崩溃。
+
+-----
+
+###为什么需要weakSelf？
+
+&lt;br&gt;
+有很多文档啊博客啊都解释过这个问题，简单的说：
+&gt;1. block中使用的赋值给附有```__strong```修饰符的自动变量的对象由于被堆上的block所持有，因而可超出其变量作用域而存在。
+2. 在Grand Central Dispatch的API中传递block时，栈上的block会复制到堆。
+
+如果一个对象直接或间接持有了block，而block又持有那个对象，则会产生一个retain cycle，导致内存泄漏。所以在MRC下，可以用```__block```修饰符修饰block中使用的变量，而在ARC下，可以用```__weak```或```__unsafe_unretained```修饰符修饰block中使用的变量，来破坏这个retain cycle。
+由于很多情况下，造成retain cycle的对象都是self，所以这些情况下，会使用weakSelf来破坏retain cycle。
+
+然而重点是“retain cycle”，而不是“weakSelf”。
+</code></pre>
+<p>dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{<br>
+[weakSelf alarm];<br>
+});</p>
+<pre><code>这段代码中，self并没有持有block，所以当block需要访问self的时候，使用weakSelf是多余的。
+
+所以在这段代码中，直接在block中使用self，不会产生retain cycle，也可以让self对象一直存活到block被运行的时候。
+</code></pre>
+<ul>
+<li>(void)alarmLater {<br>
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{<br>
+        [self alarm];<br>
+    });<br>
+}</li>
+</ul>
+<pre><code>
+-------
+
+###扯点教训
+
+&lt;br&gt;
+因为遇到了这个bug，最近也补了点关于block的知识。看了[《Objective-C高级编程》](http://book.douban.com/subject/24720270/)里关于block实现的那段，觉得对block的认识清晰了一些。以前一直看不懂里面成片的C代码，这次居然明白了个大概，不知道是不是我进步了一点。
+
+无脑总是不对的。作为一个程序员，写下的每一行代码，都得清楚的知道是为什么吧。
+
+-------
+
+####参考
+[《Objective-C高级编程》](http://book.douban.com/subject/24720270/)
+[谈Objective-C Block的实现](http://blog.devtang.com/blog/2013/07/28/a-look-inside-blocks/)
+[正确使用Block避免Cycle Retain和Crash](http://tanqisen.github.io/blog/2013/04/19/gcd-block-cycle-retain/)
+</code></pre>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/shi-yong-symbolicatecrash-jie-xi-le-yi-ge-crash-log/">
+              <h3 class="post-title">
+                下一篇：使用symbolicatecrash解析了一个crash log
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

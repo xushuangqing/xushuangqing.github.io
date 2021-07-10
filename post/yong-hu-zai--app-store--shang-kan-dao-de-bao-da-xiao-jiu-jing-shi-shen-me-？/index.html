@@ -1,0 +1,218 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>用户在 app store 上看到的包大小究竟是什么？ | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">用户在 app store 上看到的包大小究竟是什么？</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2019-05-28</span>
+            
+          </div>
+          <div class="post-content">
+            <p>在做安装包大小优化前，我们应该首先搞清楚，用户在 app store 上看到的包大小，究竟是什么？</p>
+<p>如果我们衡量安装包大小的口径，和用户看到的大小不一致，那么做优化时的优先级和ROI衡量就可能跑偏，甚至出现优化效果为负的悲惨结局。</p>
+<p>首先抛出结论：用户在 app store 上看到的包大小，是：</p>
+<ul>
+<li>.app 文件</li>
+<li>的二进制部分被加壳后</li>
+<li>再经过 app slicing</li>
+</ul>
+<p>的大小。</p>
+<h2 id="如何查看">如何查看</h2>
+<p>在某个版本的 app 上线之前，开发者应该如何知晓它在用户眼中的大小呢？<br>
+苹果的 itunes connect 后台为开发者提供了查看安装包大小的功能。</p>
+<p>在 itunes connect 后台，开发者可以看到当前版本针对不同机型的大小。</p>
+<figure data-type="image" tabindex="1"><img src="https://xushuangqing.github.io/post-images/yong-hu-zai--app-store--shang-kan-dao-de-bao-da-xiao-jiu-jing-shi-shen-me-%EF%BC%9F/164542-b5d90389dd33d56d.png" alt="" loading="lazy"></figure>
+<p>这里的大小分为两个口径：<br>
+Download Size 和 Install Size。</p>
+<p>根据网页上的说明：<br>
+Install Size 是这个 app 安装后，会占用的磁盘大小；<br>
+Download Size 是 app 经过压缩后的大小。</p>
+<p>根据经验，用户在 app store 上看到的大小，就是 itunes connect 后台中显示的 Install Size。</p>
+<p>而令开发者在意的，“超过 150 MB 的 app 必须连接至无线局域网才能下载”的规则中的 150 MB，指的其实是 Download Size。</p>
+<h2 id="几个口径">几个口径</h2>
+<p>Download Size 和 Install Size 是如何计算出来的，我们等下再说。</p>
+<p>抛开 itunes connect 和 app store，平时我们在开发打包一个 app 时，经常会接触到这样几个安装包概念：</p>
+<ul>
+<li>ipa</li>
+<li>app</li>
+</ul>
+<p>ipa 可能是我们最熟悉的“安装包”的格式。通过 Xcode 的 archive 方式，最终打出的安装包的格式就是 ipa。<br>
+实际上，ipa 就是一个 zip 压缩包。我们可以用 unzip 的方式来解压一个 ipa 文件。</p>
+<p>这样，我们会得到一个后缀名为.app的文件。</p>
+<p>甚至可以想进入一个文件夹一样进入到这个.app中，窥探二进制、各个资源分别占据了多少大小。</p>
+<p>这里我们知道了，.app 文件和 .ipa 文件的关系：<br>
+ipa 文件是 app 文件 zip 压缩后的产物。</p>
+<h2 id="用户看到的大小">用户看到的大小</h2>
+<p>那么用户看到的 Install Size，究竟是 .app 文件的大小，还是 .ipa 文件的大小呢？<br>
+答案：都不是。但是 .app 文件的大小与 Install Size 的口径更为接近。</p>
+<h3 id="加壳">加壳</h3>
+<p>苹果在 iOS 9 推出了能减小安装包的 app thining 功能。我们先不考虑这个功能，看看 iOS 9 以前 Install Size 与 .app 文件的关系。</p>
+<p>要获取 app store 上的安装包，其实没有正规的做法。有一个比较trick的技巧可以获得：<br>
+https://www.jianshu.com/p/ce018473fad0</p>
+<p>通过这个方式，我们可以下载到一个 .ipa 文件。<br>
+这个 ipa 文件经解压后得到的 app 文件，其大小与 iOS 9 以下设备在 app store 上看到的大小是吻合的。也与 itunes connect 中，开发者看到的 Install Size 是吻合的。</p>
+<p>但是，它与开发者提交到 itunes connect 前的 app 文件大小，是有一定差距的。</p>
+<p>比如，我们提交到 app store 上的 ipa 解压后的大小为 297.1MB<br>
+从 app store 上下载的 ipa 解压后大小为 301.9MB</p>
+<p>其中这 3.8 MB 的大小差异来自哪里呢？<br>
+来自加壳。</p>
+<p>我们对比了这两个 app 包中的各个文件大小，发现各资源文件的大小完全一致，只有二进制文件的大小发生了改变。</p>
+<p>使用 otool 命令</p>
+<pre><code>otool -l 可执行文件路径 | grep crypt
+</code></pre>
+<p>我们可以验证，app store 中下载的包经过了加壳，而提交 itunes connect 前的包没有。</p>
+<p>使用</p>
+<pre><code>otool -l
+</code></pre>
+<p>命令可以输出 Mach-O 文件加载的 load command。经对比发现，虽然加壳改变了TEXT段的内容，却没有改变TEXT段的大小。这 3.8 MB 的大小差异主要来自 __LINKEDIT 和 LC_CODE_SIGNATURE 这两个段，这两个段都与动态链接器有关。</p>
+<p>因此，我们可以得到结论：iOS 9 之前，用户看到的 Install Size 的大小，是 .app 文件经过加壳的大小，粗略的可以认为就是 .app 文件的大小。</p>
+<h3 id="app-slicing">app slicing</h3>
+<p>上述的分析针对于 iOS 9 以下设备看到的情况。</p>
+<p>如果考虑苹果在 iOS 9 上推出的 app thining 功能，安装包大小会有什么影响呢？</p>
+<p>我们先了解一下，如果没有 app thining，一个安装包中会包含哪些内容。</p>
+<p>对二进制来说，由于一个安装包需要同时支持 iPhone 5 等 32 位设备和 iPhone 5s 以上的 64 位设备，所以二进制中需要包含 armv7 和 arm64 两个架构的 Mach-O 文件。</p>
+<p>对于放在 asset catalog 中的资源来说，一般来说，开发者为了更好的适配 iPhone 6 等 2x 屏幕的设备和 iPhone 6 plus 等 3x 屏幕的设备，每一个图片资源会引入 2x 和 3x 两个版本。</p>
+<p>对于其他图片/资源来说，它们也会被收入到安装包中。</p>
+<p>这里，我们可以明显发现，如果一个设备下载安装了安装包中的全部内容，有两个明显浪费的地方：</p>
+<ol>
+<li>有一份它不需要的 Mach-O</li>
+<li>有一份它不需要的资源图</li>
+</ol>
+<p>苹果在 iOS 9 推出的 app slicing，就帮助开发者将这两个浪费的地方干掉了。</p>
+<p>对于资源图，官方文档中有说明：<br>
+A thinned .ipa is a compressed app bundle that contains only the resources needed to run the app on a specific device.<br>
+https://developer.apple.com/library/archive/qa/qa1795/_index.html</p>
+<p>对于二进制，我们没有在官方文档中找到说明。但 WWDC App Thinning in Xcode 一篇中这样介绍了 app slicing 功能:</p>
+<figure data-type="image" tabindex="2"><img src="https://xushuangqing.github.io/post-images/yong-hu-zai--app-store--shang-kan-dao-de-bao-da-xiao-jiu-jing-shi-shen-me-%EF%BC%9F/164542-0208f48fc6c8dc31.png" alt="" loading="lazy"></figure>
+<p>这张图中体现了，无论是二进制还是 asset catalog 中的资源，app slicing 都只保留了当前设备所需的部分。</p>
+<p>而在导出 ipa 时，在配置 plist 文件中加入 <thin-for-all-variants> 选项，则可以导出针对不同机型的 ipa 文件。经实验，这些 ipa 文件解压后得到的 app 文件大小，与 itunes connect 后台各个设备对应的 Install Size 是吻合的。</p>
+<h2 id="优化建议">优化建议</h2>
+<p>正如文章开头的结论：</p>
+<p>用户在 app store 上看到的包大小，是：</p>
+<ul>
+<li>.app 文件</li>
+<li>的二进制部分被加壳后</li>
+<li>再经过 app slicing</li>
+</ul>
+<p>的大小。</p>
+<p>得知了用户看到的包大小究竟是什么含义，我们可以避开一些包大小优化的坑。</p>
+<p>比如，由于 app slicing 的存在，图标应该尽可能用 asset catalog 管理起来。所以试图用 webp 等格式来替代 asset catalog，可能是负向收益。<br>
+（这个思路经过实验，结论是，在我们的业务场景下，如果用 webp 替代 asset catalog，对于 2x 设备的 Download Size 是负向收益，因为 2x 设备不得不使用 3x 的图片，并且 webp 图的压缩率比 asset catalog 低很多）</p>
+<p>再比如，不要幻想抛弃 armv7 架构的设备，可以减小包大小。苹果已经帮开发者做过这一步了。</p>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/YYThreadSafeArray-zai-duo-xian-cheng-fang-mian-de-ruo-gan-wen-ti--1/">
+              <h3 class="post-title">
+                下一篇：YYThreadSafeArray在多线程方面的若干问题
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

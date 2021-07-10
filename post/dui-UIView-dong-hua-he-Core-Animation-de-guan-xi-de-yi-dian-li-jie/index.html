@@ -1,0 +1,165 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>对UIView动画和Core Animation的关系的一点理解 | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">对UIView动画和Core Animation的关系的一点理解</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2015-04-06</span>
+            
+          </div>
+          <div class="post-content">
+            <p>在iOS开发的时候，如果想给用户界面加入一些简单的动画，那UIView动画一定是很多人的首选。因为它写起来非常简洁，只需要把将要改变的property值放入UIView的animation block中，比如：</p>
+<pre><code>[UIView animateWithDuration:5.0
+                 animations:^{
+                     myView.alpha = 0.5;
+                 }];
+</code></pre>
+<p>但是我也一直疑惑，这样的写法，和使用CAAnimation有什么不同呢？有人说，UIView动画只是把Core Animation的一些操作封装了起来。虽然我也这么猜测，但是我打算写代码验证一下。</p>
+<p>根据<a href="https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/CoreAnimation_guide/ReactingtoLayerChanges/ReactingtoLayerChanges.html#//apple_ref/doc/uid/TP40004514-CH7-SW1">这篇苹果官方文档</a>，我们可以得知，每一个view.layer都以该view作为其delegate，并通过询问view的<code>actionForLayer:forKey:</code>方法来获得自己应该执行的CAAction对象。</p>
+<p>所以我自定义了一个XSQView类，继承自UIView，仅仅重写了其中的<code>actionForLayer:forKey:</code>方法：</p>
+<pre><code>- (id&lt;CAAction&gt;)actionForLayer:(CALayer *)layer forKey:(NSString *)event {
+    id&lt;CAAction&gt; action = [super actionForLayer:layer forKey:event];
+    NSLog(@&quot;action for layer: %@, for key:%@ is %@&quot;, layer, event, action);
+    return action;
+}
+</code></pre>
+<p>用于观察UIView对它的layer提供了什么样的CAAction对象。</p>
+<p>用UIView动画改变XSQView对象的property，比如：</p>
+<pre><code>[UIView animateWithDuration:5.0
+                 animations:^{
+                     xsqView.alpha = 0.5;
+                 }];
+</code></pre>
+<p>可以发现，此时，XSQView中的<code>actionForLayer:forKey:</code>方法被多次调用，产生了这样的输出：</p>
+<pre><code>2015-04-06 11:59:21.373 AnimationDemo[1023:44875] action for layer: &lt;CALayer: 0x7fa952413150&gt;, for key:bounds is &lt;null&gt;
+2015-04-06 11:59:21.374 AnimationDemo[1023:44875] action for layer: &lt;CALayer: 0x7fa952413150&gt;, for key:opaque is &lt;null&gt;
+2015-04-06 11:59:21.375 AnimationDemo[1023:44875] action for layer: &lt;CALayer: 0x7fa952413150&gt;, for key:position is &lt;null&gt;
+2015-04-06 11:59:21.375 AnimationDemo[1023:44875] action for layer: &lt;CALayer: 0x7fa952413150&gt;, for key:onOrderIn is &lt;null&gt;
+2015-04-06 11:59:21.408 AnimationDemo[1023:44875] action for layer: &lt;CALayer: 0x7fa952413150&gt;, for key:opacity is &lt;CABasicAnimation: 0x7fa95275bc20&gt;
+</code></pre>
+<p><code>&lt;null&gt;</code>是<code>[NSNull null]</code>的输出。说明对于其他的几种key，UIView对象告诉它的layer，停止对CAAction对象的搜索。而对opacity这个key，UIView对象则给出了一个CABasicAnimation对象。</p>
+<p>打印这个CABasicAnimation对象的部分信息，发现这可能就是由UIView animation block中的代码转换出的CAAnimation。</p>
+<pre><code>&lt;CABasicAnimation:0x7fa95275bc20; delegate = &lt;UIViewAnimationState: 0x7fd811c376b0&gt;; fillMode = both; timingFunction = easeInEaseOut; duration = 5; fromValue = 1; keyPath = opacity&gt;
+</code></pre>
+<p>（但是这个CABasicAnimation中的toValue和byValue都是nil）</p>
+<p>另外，用类似的方式观察layer对象的行为（根据<a href="https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/CoreAnimation_guide/SettingUpLayerObjects/SettingUpLayerObjects.html#//apple_ref/doc/uid/TP40004514-CH13-SW12">苹果官方文档</a>，可以通过重载UIView中的<code>layerClass</code>方法来改变这个View使用的layer的类型。所以自定义一个CALayer的子类作为view的layerClass，并重写CALayer的部分方法起到监控CALayer行为的目的。），我发现layer的<code>addAnimation:forKey:</code>方法也被调用了，这个CABasicAnimation对象被加入到了layer中。</p>
+<p>如果在UIView的animation block中，改变了一个view的多个property，则会有多个CAAnimation对象被加入到layer中。</p>
+<p>我觉得到这里已经能表明，UIView动画其实就是对Core Animation的一种封装，向客户程序员呈现更简洁的接口。</p>
+<p>但是我也发现了，在UIView的animation block中改变position或者bounds等属性，会有一些特别的行为。因为这些属性可能对应着多个animation key。所以，从<code>actionForLayer:forKey:</code>中返回的对象也不是一个CAAnimation对象了，而是一个（没有公开的）<code>_UIViewAdditiveAnimationAction</code>对象。随后，可能有多个CAAnimation对象被加入到layer中。</p>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/UIScrollView-gun-dong-dong-hua/">
+              <h3 class="post-title">
+                下一篇：UIScrollView滚动动画
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

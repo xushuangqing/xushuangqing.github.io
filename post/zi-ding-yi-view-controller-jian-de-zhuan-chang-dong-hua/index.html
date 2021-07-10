@@ -1,0 +1,176 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>自定义view controller间的转场动画 | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">自定义view controller间的转场动画</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2015-10-31</span>
+            
+          </div>
+          <div class="post-content">
+            <p>似乎有好久都没有更新博客了(´･_･`)，十一回家的火车上看了苹果最近更新的<a href="https://developer.apple.com/library/prerelease/tvos/featuredarticles/ViewControllerPGforiPhoneOS/index.html">View Controller Programming Guide</a>，回来后忙里偷闲试验了自定义view controller之间的转场动画，就写这篇博客来记录一下吧。</p>
+<p>iOS系统本身为一个<code>UIViewController</code>对象提供了这样几种转场动画形式（<code>UIModalTransitionStyle</code>），分别是：</p>
+<pre><code>UIModalTransitionStyleCoverVertical（默认，自下而上覆盖）
+UIModalTransitionStyleFlipHorizontal（水平翻转）
+UIModalTransitionStyleCrossDissolve（溶解）
+UIModalTransitionStylePartialCurl（翻页）
+</code></pre>
+<p>以前，我一直以为view controller之间的转场动画是一种神奇的存在，是因为我没有意识到<code>UITransitionView</code>的存在。</p>
+<p>先写一个特别简单的demo，就是在rootViewController上present一个<code>UIViewController</code>的对象，比如这样：</p>
+<pre><code>- (void)viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
+    
+    UIViewController *viewController = [[UIViewController alloc] init];
+    viewController.view.backgroundColor = [UIColor redColor];
+    [self presentViewController:viewController animated:YES completion:nil];
+}
+</code></pre>
+<p>运行app，等上层的view controller弹出，用Xcode的视图调试工具，能看到这样的视图结构：</p>
+<figure data-type="image" tabindex="1"><img src="https://xushuangqing.github.io/post-images/zi-ding-yi-view-controller-jian-de-zhuan-chang-dong-hua/164542-455b9f7a682fdd2e.png" alt="视图结构" loading="lazy"></figure>
+<p>其中的那个<code>UIView</code>，就是<code>presentedViewController</code>的视图，可以发现，它是一个<code>UITransitionView</code>对象的子视图。这个<code>UITransitionView</code>对象，就是view controller之间转场动画的画布。</p>
+<hr>
+<p>###自定义view controller间的转场动画</p>
+<br>
+iOS7及之后版本中，第三方程序员可以为自己的app设置自定义的view controller转场动画了。
+<p>如果想要自定义view controller之间的转场动画，首先要给即将展现的那个view controller设置<code>transitionDelegate</code>。</p>
+<p>这个<code>transitionDelegate</code>所对应的类需要实现<code>UIViewControllerTransitioningDelegate</code>协议。如果只是想要自定义转场动画，而不需要让用户与这个动画有所交互的话，可以只用实现协议中的这两个方法：</p>
+<pre><code>- (id &lt;UIViewControllerAnimatedTransitioning&gt;)animationControllerForPresentedController:(UIViewController *)presented presentingController:(UIViewController *)presenting sourceController:(UIViewController *)source;
+</code></pre>
+<p>和</p>
+<pre><code>- (id &lt;UIViewControllerAnimatedTransitioning&gt;)animationControllerForDismissedController:(UIViewController *)dismissed;
+</code></pre>
+<p>其中，返回的对象所属的类需要实现<code>UIViewControllerAnimatedTransitioning</code>协议。这个类如何实现，是自定义动画的关键。</p>
+<p>比如我定义了一个名叫<code>XSQAnimationObject</code>的类，它实现了<code>UIViewControllerAnimatedTransitioning</code>协议。然后将它的实例对象作为上两个方法（present和dismiss）的返回值。</p>
+<p>在<code>XSQAnimationObject</code>中，必须实现<code>UIViewControllerAnimatedTransitioning</code>协议中的这两个方法：</p>
+<pre><code>//在这个方法的实现中，返回转场动画的时长
+- (NSTimeInterval)transitionDuration:(nullable id &lt;UIViewControllerContextTransitioning&gt;)transitionContext;
+</code></pre>
+<p>和</p>
+<pre><code>//在这个方法的实现中，进行转场动画
+- (void)animateTransition:(id &lt;UIViewControllerContextTransitioning&gt;)transitionContext;
+</code></pre>
+<p>其中的<code>transitionContext</code>这个参数，可以提供与对转场动画必要的信息，比如presenting view controller，presented view controller等。<code>transitionContext</code>中的<code>containerView</code>，便是应该呈现转场动画的视图。如果在运行时打印出来，会发现这个<code>containerView</code>是<code>UITransitionView</code>的实例，其实也是最开始图上的那个<code>UITransitionView</code>。</p>
+<p>在转场动画完成后，一定要记得调用<code>transitionContext</code>的<br>
+<code>completeTransition:</code>方法。只有这样，<code>presentViewController:animated:completion:</code>中的completion块才能被调用。</p>
+<p>最后，自己写了一个简单的demo，尝试了“zoom”效果的转场动画，虽然这个效果已经满大街都是了，但还是放上我写的代码的<a href="https://github.com/xushuangqing/iOS-demos/tree/master/XSQControllerDemo">github</a>链接吧(⊙ω⊙)</p>
+<hr>
+<p>####参考</p>
+<p><a href="https://developer.apple.com/library/prerelease/tvos/featuredarticles/ViewControllerPGforiPhoneOS/CustomizingtheTransitionAnimations.html">View Controller Programming Guide: Customizing the Transition Animations</a><br>
+<a href="http://objccn.io/issue-12-3/">自定义 ViewController 容器转场</a></p>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/yong-category-shi-yu-dao-de-liang-ge-wen-ti----/">
+              <h3 class="post-title">
+                下一篇：用category时遇到的两个问题
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

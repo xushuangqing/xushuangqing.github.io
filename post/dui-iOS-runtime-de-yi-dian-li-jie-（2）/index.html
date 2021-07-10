@@ -1,0 +1,170 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>对iOS runtime的一点理解（2） | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">对iOS runtime的一点理解（2）</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2015-04-22</span>
+            
+          </div>
+          <div class="post-content">
+            <p>参考<a href="http://www.justinyan.me/post/1624">这篇文章</a>和我的理解，<code>objc_msgSend</code>方法中，查找一个消息对应的实现的过程大致应该是这样的：</p>
+<ol>
+<li>检测这个selector是不是要忽略的；</li>
+<li>检测这个target是不是nil对象；<br>
+（这两步中，如果消息应该被忽略，那么对应的方法是不会被执行的）</li>
+<li>在receiver对应的类结构中查找selector和它对应的过程，先在cache里找，如果没有命中，就依次在类的方法分发表中查找；</li>
+<li>如果在方法分发表中找不到，就开始查看动态方法；</li>
+<li>如果还找不到就开始执行消息转发逻辑。</li>
+</ol>
+<p>#####动态方法<br>
+参考<a href="https://developer.apple.com/library/ios/documentation/Cocoa/Conceptual/ObjCRuntimeGuide/Articles/ocrtDynamicResolution.html">苹果官方文档</a>，如果运行时系统未能在方法分发表中找到消息对应的具体实现，那么将会调用</p>
+<pre><code>+(BOOL)resolveInstanceMethod:(SEL)aSEL
+</code></pre>
+<p>方法，程序员可以通过重写这个方法，为receiver类动态的增加selector对应的方法。</p>
+<p>#####消息转发机制<br>
+如果经过了动态方法这一步骤，还不能找到消息对应的具体实现，那么运行时系统就会用到消息转发机制。<br>
+在进入消息转发机制时，对程序员来说，还有两次转发消息的机会。</p>
+<p><strong>一. 备用接收者</strong></p>
+<p>如果以上几步都无法处理某个消息，则运行时系统会调用这个方法：</p>
+<pre><code>- (id)forwardingTargetForSelector:(SEL)aSelector
+</code></pre>
+<p>从方法名中就可以看出，这个方法返回的对象将作为消息的备用接收者。也就是说，重写这个方法可以控制消息转发到哪个对象上去。</p>
+<p><strong>二. 完整消息转发</strong></p>
+<p>如果上一步还是没能处理这个消息，那么完整消息转发就成了整个发消息过程的最后一步。运行时系统会调用这个方法：</p>
+<pre><code>- (void)forwardInvocation:(NSInvocation *)anInvocation
+</code></pre>
+<p>这个方法应该要完成这两件事情：</p>
+<ol>
+<li>决定这个消息被发送到哪里；</li>
+<li>将这个消息发送到那里。</li>
+</ol>
+<p>在重写的这个方法中，程序员还有机会对消息的内容（比如参数等）进行修改。</p>
+<p>需要注意的是，在重写这个方法，企图进行消息转发的同时，也需要重写：</p>
+<pre><code>- (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
+</code></pre>
+<p>参考这个方法的<a href="https://developer.apple.com/library/mac/documentation/Cocoa/Reference/Foundation/Classes/NSObject_Class/index.html#//apple_ref/occ/instm/NSObject/methodSignatureForSelector:">文档</a>，<code>methodSignatureForSelector:</code>将先于<code>forwardInvocation:</code>方法调用。消息转发机制需要使用从<code>methodSignatureForSelector:</code>中获取的信息来创建即将被转发的<code>NSInvocation</code>对象。</p>
+<hr>
+<p>#####我自己的一些理解</p>
+<p>感觉很多人会把动态方法当作消息转发机制的一部分，但是我觉得这样的理解不是很准确。首先，<a href="https://developer.apple.com/library/ios/documentation/Cocoa/Conceptual/ObjCRuntimeGuide/Articles/ocrtDynamicResolution.html">苹果官方文档</a>上有这么一句话：</p>
+<blockquote>
+<p>Forwarding methods (as described in Message Forwarding) and dynamic method resolution are, largely, orthogonal.</p>
+</blockquote>
+<p>另外，动态方法会被<code>respondsToSelector:</code>、<code>methodForSelector:</code>考虑进去，但是消息转发机制并不会。</p>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/dui-iOS-runtime-de-yi-dian-li-jie-（1）/">
+              <h3 class="post-title">
+                下一篇：对iOS runtime的一点理解（1）
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

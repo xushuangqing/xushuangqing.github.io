@@ -1,0 +1,194 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>对OC中property的一点理解 | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">对OC中property的一点理解</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2015-07-21</span>
+            
+          </div>
+          <div class="post-content">
+            <p>最近在看即将要加入的项目的代码，看到一个protocol里包含着几个property。之前没有写过类似的代码，看到这里的时候，突然疑惑了一下，发现自己对property的理解好像有点模糊。所以回家后又看了看文档，觉得的确涨了点姿势，所以要记下来~</p>
+<hr>
+<p>###声明accessor methods</p>
+<br>
+[官方文档](https://developer.apple.com/library/mac/documentation/General/Conceptual/DevPedia-CocoaCore/DeclaredProperty.html#//apple_ref/doc/uid/TP40008195-CH13-SW1)对property的定义是：
+>A declared property provides a syntactical shorthand for declaring a class’s accessor methods and, optionally, implementing them.
+<p>所以说，声明一个property，实际上等于<strong>声明</strong>了对应的accessor方法。</p>
+<p>对于readwrite的property来说，编译器为它声明了getter方法和setter方法；而对于readonly的property来说，编译器只为它声明了getter方法。<br>
+所以，如果想要对readonly的property发送setter消息，编译器就会报错。</p>
+<hr>
+<p>###合成accessor方法和实例变量</p>
+<br>
+除了**声明**对应的accessor方法，程序员也可以指示编译器合成accessor方法的实现。
+<p>比如，在一个类的implementation block中，使用类似这样的<code>@synthesize</code>语句：</p>
+<pre><code>@synthesize firstName = _firstVar;
+</code></pre>
+<p>编译器就会合成<code>firstName</code>这个property的<strong>accessor方法的实现</strong>和一个叫做<code>_firstVar</code>的<strong>实例变量</strong>。</p>
+<p>如果只是这样写<code>@synthesize</code>语句：</p>
+<pre><code>@synthesize firstName;
+</code></pre>
+<p>那么编译器合成的实例变量的名称也叫<code>firstName</code>。</p>
+<hr>
+<p>###Default Synthesis</p>
+<br>
+从Xcode 4.4和LLVM Compiler 4.0开始，编译器会默认为property合成accessor方法和实例变量，这样程序员就可以不用自己写```@synthesize```语句了。合成的实例变量的命名规则大概像是这样：
+```
+@synthesize firstName = _firstName;
+```
+也就是说，合成的实例变量的名字，是property名字前加上了一条下划线。
+<p>但是也有一些比较特殊的情况：</p>
+<ol>
+<li>
+<p>自定义了getter和setter方法的readwrite property<br>
+编译器是不会为这样的property生成默认的实例变量的。如果程序员需要，就得自己添加对应的<code>@synthesize</code>语句了。</p>
+</li>
+<li>
+<p>自定义了getter方法的readonly property<br>
+和上面一种情况类似，编译器不会为这样的property生成默认的实例变量。因为这个property是readonly的，编译器自然也不会为它声明和合成setter方法。</p>
+</li>
+<li>
+<p>Protocol中声明的property<br>
+对于protocol中声明的property，default synthesis是不会作用的。所以，所有实现了这个protocol的类都需要自定义或者用<code>@synthesize</code>语句合成accessor方法和实例变量。</p>
+</li>
+<li>
+<p>对于atomic property，不建议自定义getter和setter的其中一个</p>
+</li>
+</ol>
+<hr>
+<p>###@dynamic</p>
+<br>
+有的时候，程序员可能想要动态的提供对某个方法的实现。如果希望对property的accessor方法提供动态的实现，就可以使用```@dynamic```语句。
+```
+@dynamic firstName;
+```
+这指示了编译器，和这个property有关的方法会动态的提供，这时，即便编译器找不到这个property对应的accessor方法的实现，它也不会报出warning。
+<hr>
+<p>###关于property的建议</p>
+<br>
+苹果建议，在一般情况下尽量使用accessor方法来访问一个property，而不是直接访问它对应的实例变量。但是在一个对象的**init方法**、**deallocate方法**和**自定义的accessor方法**中不建议调用accessor方法。
+<hr>
+<p>###参考</p>
+<br>
+[Encapsulating Data](https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/ProgrammingWithObjectiveC/EncapsulatingData/EncapsulatingData.html#//apple_ref/doc/uid/TP40011210-CH5-SW2)
+[Declared property](https://developer.apple.com/library/mac/documentation/General/Conceptual/DevPedia-CocoaCore/DeclaredProperty.html#//apple_ref/doc/uid/TP40008195-CH13-SW1)
+[Accessor method](https://developer.apple.com/library/mac/documentation/General/Conceptual/DevPedia-CocoaCore/AccessorMethod.html#//apple_ref/doc/uid/TP40008195-CH2-SW1)
+[Objective-C Feature Availability Index](https://developer.apple.com/library/ios/releasenotes/ObjectiveC/ObjCAvailabilityIndex/index.html)
+[Automatic Property Synthesis With Xcode 4.4](http://useyourloaf.com/blog/2012/08/01/property-synthesis-with-xcode-4-dot-4.html)
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/zheng-li-le-yi-xia-guan-yu-KVO-de-zi-shi/">
+              <h3 class="post-title">
+                下一篇：整理了一下关于KVO的姿势
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

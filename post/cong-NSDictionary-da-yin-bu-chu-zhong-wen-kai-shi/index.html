@@ -1,0 +1,289 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>从NSDictionary打印不出中文开始 | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">从NSDictionary打印不出中文开始</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2015-12-27</span>
+            
+          </div>
+          <div class="post-content">
+            <p>一直以来，我都被一个问题小小困扰，就是当我在lldb中想要查看一个<code>NSDictionary</code>对象时，其中的中文会显示成<code>\Uxxxx</code>。<br>
+比如我创建了一个<code>NSDictionary</code>对象：</p>
+<pre><code>NSDictionary *dic = @{@&quot;我&quot; : @&quot;哈哈&quot;};
+</code></pre>
+<p>当我在lldb中想要查看它时，我使用了<code>po</code>命令，但是打印出来却是这样：</p>
+<pre><code>(lldb) po dic
+{
+    &quot;\U6211&quot; = &quot;\U54c8\U54c8&quot;;
+}
+</code></pre>
+<p>虽然单独打印键和值都能显示出正确的中文，也不影响程序的最终执行结果，但是在调试的时候，没法方便直观的看到<code>dic</code>里的数据，还是有点苦恼的。</p>
+<p>之前也没怎么在意，不过秉承着（三分钟热度的）新年新气象的决心，打算解决一下这个问题。</p>
+<hr>
+<p>###解决方案</p>
+<br>
+先说最后找到的一个解决方案：利用[chisel](https://github.com/facebook/chisel)中的```pjson```命令，就可以查看到```NSDictionary```对象中的中文了(=ﾟωﾟ)ﾉ。
+```
+(lldb) pjson dic
+{
+  "我" : "哈哈"
+}
+```
+<br>
+除此之外，之前还考虑了几种解决办法：
+<ol>
+<li>
+<p>利用method swizzling替换<code>NSDictionary</code>中的<code>description</code>方法:<br>
+可以参考这篇博客：<a href="http://itony.me/886.html">解决 NSDictionary 输出中文字符乱码（Unicode）问题</a>，但是使用这个方法也有诸多问题，比如需要给每个工程加上这个扩展，替换系统方法存在一定风险。</p>
+</li>
+<li>
+<p>在lldb上做手脚：<br>
+我只是希望能在debug的时候让<code>NSDictionary</code>打印中文，并非想改变<code>NSDictionary</code>的实现，所以想到，在lldb上做手脚应该是一个比较合适的方法。<br>
+前两天刚刚装了<a href="https://github.com/facebook/chisel">chisel</a>，感觉在lldb上做手脚的方案应该可行，所以想先研究一下<a href="https://github.com/facebook/chisel">chisel</a>是怎么工作的，然后发现用户其实可以在<a href="https://github.com/facebook/chisel">chisel</a>中自定义命令。</p>
+</li>
+</ol>
+<p>正在我研究<a href="https://github.com/facebook/chisel">chisel</a>源码的时候，突然发现其中居然有个<code>pjson</code>命令(☆_☆)，一试，原来正符合我的需要。<br>
+虽然这个方法不能在<code>NSLog</code>的时候也正常显示<code>NSDictionary</code>对象中的中文，但是平时debug我基本都使用lldb上的命令，所以这个局限对我来说也没有什么影响。</p>
+<hr>
+<p>###原理</p>
+<br>
+为什么用```pjson```就可以正确打印出```NSDictionary```对象中的中文呢？
+先看看[chisel](https://github.com/facebook/chisel)对```pjson```命令的实现，在```/commands/FBPrintCommands.py```中：
+```
+def run(self, arguments, options):
+    objectToPrint = arguments[0]
+    pretty = 1 if options.plain is None else 0
+    jsonData = fb.evaluateObjectExpression('[NSJSONSerialization dataWithJSONObject:{} options:{} error:nil]'.format(objectToPrint, pretty))
+    jsonString = fb.evaluateExpressionValue('(NSString*)[[NSString alloc] initWithData:{} encoding:4]'.format(jsonData)).GetObjectDescription()
+<pre><code>print jsonString
+</code></pre>
+<pre><code>虽然我对Python不太熟，但是大概能明白，在lldb中使用```pjson```，相当于先将这个```NSDictionary```对象序列化成```NSData```对象，然后在转换成```NSString```对象输出。
+
+试了试用这种方法转换出的字符串，的确可以正确显示中文：
+</code></pre>
+<p>NSDictionary *dic = @{@&quot;我&quot; : @&quot;哈哈&quot;};<br>
+NSData *data = [NSJSONSerialization dataWithJSONObject:dic options:NSJSONWritingPrettyPrinted error:nil];<br>
+NSString *jsonString = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];<br>
+NSLog(@&quot;%@&quot;, jsonString);</p>
+<pre><code></code></pre>
+<p>2015-12-27 15:09:28.012 XSQPJsonNDemo[1796:1977106] {<br>
+  &quot;我&quot; : &quot;哈哈&quot;<br>
+}</p>
+<pre><code>
+----
+
+###编码
+
+&lt;br&gt;
+虽然解决了这个问题，但是仍然对编码感觉很困惑。
+
+[解决 NSDictionary 输出中文字符乱码（Unicode）问题](http://itony.me/886.html) 中用了将```NSString```转换成```char *```再转换回```NSString```的方法，为什么经过这两次转换就能让中文正确显示了呢？
+</code></pre>
+<p>@implementation NSDictionary (Unicode)</p>
+<ul>
+<li>(NSString*)my_description {<br>
+    NSString *desc = [self my_description];<br>
+    desc = [NSString stringWithCString:[desc cStringUsingEncoding:NSUTF8StringEncoding] encoding:NSNonLossyASCIIStringEncoding];<br>
+    return desc;<br>
+}<br>
+ <br>
+@end</li>
+</ul>
+<pre><code>
+&lt;br&gt;
+什么都不懂@_@，上网补充了一点知识：
+1. ```\Uxxxx```是UTF-16的编码（第一个Unicode平面），比如欧元符（€）的编码为```\U20ac``` 。
+2. NSString自身使用的是UTF-16：
+
+&gt;An NSString object encodes a Unicode-compliant text string, represented as a sequence of UTF–16 code units. All lengths, character indexes, and ranges are expressed in terms of 16-bit platform-endian values, with index values starting at 0.
+
+
+按照上面转换两次的思路，我写了这样几行代码：
+</code></pre>
+<p>NSString *string = @&quot;\U20ac&quot;;<br>
+char *cstring = [string cStringUsingEncoding:NSUTF8StringEncoding];<br>
+NSString *trans = [[NSString alloc] initWithCString:cstring encoding:NSNonLossyASCIIStringEncoding];</p>
+<pre><code>
+第二行把```\U20ac```转换成了一个```char *```，这个```char *```字符串使用的编码方式是UTF-8，而UTF-8中，英文字母和数字的编码和ASCII一致，故得到的```char *```是这样的：
+
+|char[0]|char[1]|char[2]|char[3]|char[4]|char[5]|char[6]|
+|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+|'\'|'U'|'2'|'0'|'a'|'c'|\0|
+|0x5c|0x55|0x32|0x30|0x61|0x63|0x00|
+
+第三行中，假装```cstring```就是一些bit位，将其转化为一个```NSString```对象，而不进行任何转码。因为```NSString```本身是使用的是UTF-16，故在它看来，这些bit位组合在一起，得到了```@&quot;€&quot;```。
+
+然后我又想，为什么第二行要选择UTF-8的编码方式呢？直接转成ASCII是不是也可以呢？
+</code></pre>
+<p>NSString *string = @&quot;\U20ac&quot;;<br>
+char *cstring = [string cStringUsingEncoding:NSASCIIStringEncoding];<br>
+NSString *trans = [[NSString alloc] initWithCString:cstring encoding:NSNonLossyASCIIStringEncoding];</p>
+<pre><code>试了一下，这样也能得到正确的结果。但是当一开始的```string```中包含ASCII以外的字符时，```cstring```就会为```NULL```，执行第三行时崩溃。
+
+-------
+
+###抛开NSString
+
+&lt;br&gt;
+如果我只是单纯在写C代码，为什么运行下面这两行代码时，终端可以打印出中文？
+</code></pre>
+<p>char *chinese = &quot;中文&quot;;<br>
+printf(&quot;%s&quot;, chinese);</p>
+<pre><code>这里面，```chinese```只是一个字符数组，不包含任何编码信息，为什么最终打印的结果不是乱码呢？
+
+运行到这里的时候，我查看了```chinese```变量，发现其中存的已经是“中文”二字的UTF-8编码了。是谁定义由“UTF-8”作为编码方式呢？猜测应该是Xcode editor？
+
+想到打印到终端和打印到文件的原理应该类似，如果输出到了文件，那么当我去查看这个文件的时候，这个文件本身有一个编码方式，如果编码方式和文件中的内容不符，则会看到乱码。那终端是不是也应该会有自己的编码方式？还真有。
+
+![OSX上的Terminal的“偏好设置”](https://xushuangqing.github.io/post-images/cong-NSDictionary-da-yin-bu-chu-zhong-wen-kai-shi/164542-3191699260bcf6f3.png)
+
+由于editor和终端都使用UTF-8的编码方式，所以在代码中的“中文”二字，打印到终端后能正确显示。
+
+做了个小实验：
+</code></pre>
+<p>NSString *string = @&quot;€&quot;;<br>
+char *cstring = [string cStringUsingEncoding:NSMacOSRomanStringEncoding];<br>
+printf(&quot;%s&quot;, cstring);</p>
+<pre><code>这里把欧元符转换成了Mac OS Roman的编码方式，存放入```cstring```这个```char *```字符串中，然后打印。如果终端为UTF-8编码，则打印出乱码，而换成Mac OS Roman编码后，则能正确打印欧元符。
+
+--------
+####参考
+[NSString](https://developer.apple.com/library/mac/documentation/Cocoa/Reference/Foundation/Classes/NSString_Class)
+[chisel](https://github.com/facebook/chisel)
+[解决 NSDictionary 输出中文字符乱码（Unicode）问题](http://itony.me/886.html) 
+[UTF-16](https://zh.wikipedia.org/wiki/UTF-16)
+
+
+-------
+####2016.3.20更新
+
+&lt;br&gt;
+想来这篇博客讲了这么多如何解决打印不出中文的问题，却依然没有提到，为什么```NSDictionary```在输出到控制台的时候打印不出中文。
+
+虽然我们不知道```NSDictionary```究竟是怎么实现```description```方法的，但是[官方文档](https://developer.apple.com/library/mac/documentation/Cocoa/Reference/Foundation/Classes/NSDictionary_Class/#//apple_ref/occ/instp/NSDictionary/description)中好像给出了一点蛛丝马迹：
+&gt;[**description**](https://developer.apple.com/library/mac/documentation/Cocoa/Reference/Foundation/Classes/NSDictionary_Class/#//apple_ref/occ/instp/NSDictionary/description)
+&gt;A string that represents the contents of the dictionary, formatted as a property list (read-only)
+
+这里说到了property list。根据property list的[文档](https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/PropertyLists/AboutPropertyLists/AboutPropertyLists.html)，它可以被写作三种形式：XML、二进制和ASCII。浏览了一下它们的文档后，感觉ASCII格式与我们看到的、打印出来的```NSDictionary```迷之相似。且在讲到用ASCII来表示NSString时，[文档](https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/PropertyLists/OldStylePlists/OldStylePLists.html#//apple_ref/doc/uid/20001012-BBCBDBJE)中提到：
+&gt; Though the property list format uses ASCII for strings, note that Cocoa uses Unicode. Since string encodings vary from region to region, this representation makes the format fragile. You may see strings containing unreadable sequences of ASCII characters; these are used to represent Unicode characters.
+
+而苹果在[一封邮件](https://lists.apple.com/archives/cocoa-dev/2009/Aug/msg00843.html)中，明确的提到了，```NSDictionary```和```NSArray```都会打印出“old-style ASCII property list”。虽然这封邮件的时间有点早，且```description```方法很容易随着iOS版本的升级而改动，但是至少，它还是正面解释了为什么```NSDictionary```打印不出中文。
+</code></pre>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/zi-ding-yi-view-controller-jian-de-zhuan-chang-dong-hua/">
+              <h3 class="post-title">
+                下一篇：自定义view controller间的转场动画
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

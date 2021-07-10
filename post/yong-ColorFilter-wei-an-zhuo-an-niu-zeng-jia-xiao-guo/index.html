@@ -1,0 +1,341 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>用ColorFilter为安卓按钮增加效果 | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">用ColorFilter为安卓按钮增加效果</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2015-05-12</span>
+            
+          </div>
+          <div class="post-content">
+            <p>某天，设计师同学Syson问我，怎么在安卓上做出类似iOS上的按钮点击效果，也就是在手指按下去的时候，按钮中非透明的部分变暗，是不是应该给每个按钮出两个素材。<br>
+这个效果在iOS上是自带的，但是该怎么在安卓实现呢。上网查了查，发现可以使用ColorFilter对Drawable的东西做改变，这样，设计师就不用为每个按钮出两套素材了。</p>
+<p>看到ColorFilter这个词，猜猜意思大概就是类似滤镜的存在，应该就是我想要找的东西了吧。但是刚看了一眼Drawable中的setColorFilter方法，就已经被其中的各种PorterDuff.Mode中的模式弄晕了。官方文档中对ColorFilter中需要设置的PorterDuff.Mode的解释也都是我看不懂的公式-.-还好找到了几篇比较通俗的讲解，所以大概了解了一下每一种Mode直观上的意思，当然啦没学过图形学还是不能完完全全理解，所以这里写的只是我觉得比较好理解的方式吧。</p>
+<p>先要说：PorterDuff是什么，因为我完全看不懂这两个词拼在一起是什么意思。后来发现，这居然是两个人的姓！Thomas Porter和Tom Duff在1984年发了一篇paper，提出了带alpha通道的数字图像的组合运算（可以这么说么？），反正就是很厉害的样子-.-。</p>
+<p>进入正题～<br>
+当我们描述一个像素点的时候，可以用RGBA四个维度来描述它。其中的A是alpha，它的值在0到1之间。0表示了这个像素点是完全透明的。1表示了这个像素点是完全不透明的。为了方便理解，假设我手头有两张图片，每一张的每一个像素点，要么是全不透明，要么是全透明，也就是说现在暂时没有alpha在(0, 1)之间的像素点。<br>
+比如这样两张图片：红色的圆形和蓝色的方形。</p>
+<figure data-type="image" tabindex="1"><img src="https://xushuangqing.github.io/post-images/yong-ColorFilter-wei-an-zhuo-an-niu-zeng-jia-xiao-guo/164542-157b085d1add2675.png" alt="红色的圆形" loading="lazy"></figure>
+<figure data-type="image" tabindex="2"><img src="https://xushuangqing.github.io/post-images/yong-ColorFilter-wei-an-zhuo-an-niu-zeng-jia-xiao-guo/164542-17cdd2ebd9502b6b.png" alt="蓝色的方形" loading="lazy"></figure>
+<p>现在我们把红色的圆形这张图放在下面，将蓝色的方形这张图叠上去。这时，每一个像素点的位置可能会有四种情况：</p>
+<ol>
+<li>这两张图片，在这一个位置上的像素点都是透明；</li>
+<li>这两张图片，在这一个位置上的像素点都是不透明的；</li>
+<li>红色的圆形图片中，在这个位置的像素点是透明的，而蓝色的方形图片中，在这个位置上的像素点是不透明的；</li>
+<li>蓝色的方形图片中，在这个位置的像素点是透明的，而红色的圆形图片中，在这个位置上的像素点是不透明的；</li>
+</ol>
+<p>那么这两张图片上下叠起来之后，最后呈现在这个像素点的位置的颜色应该是什么呢？如果我们找了一张新的画布，要把最后呈现的样子画到新的画布上，那么新的画布上的每个像素点，已经默默的根据上面的四种情况被分为了四类。</p>
+<p>现在我们要对新的画布涂颜色了。新画布上每一个像素点应该涂什么颜色呢？因为这个颜色不能凭空变出来，所以得遵循这样的规则（为了好理解，这是以alpha只能为0或1为前提的，如果alpha是其它值，就不一定是这样啦）：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">像素点的类型</th>
+<th style="text-align:left">都是透明的</th>
+<th style="text-align:left">都是不透明的</th>
+<th style="text-align:left">只在红色的圆形图片中是透明的</th>
+<th style="text-align:left">只在蓝色的方形图片中是透明的</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">可以涂什么颜色</td>
+<td style="text-align:left">只能涂透明色</td>
+<td style="text-align:left">能涂透明色、蓝色或红色</td>
+<td style="text-align:left">能涂透明色或蓝色</td>
+<td style="text-align:left">能涂透明色或红色</td>
+</tr>
+</tbody>
+</table>
+<p>这样以来，对于整张图，我们一共得到了1X3X2X2也就是12种规则。</p>
+<p>这12种规则可以类比PorterDuff的12种模式，当然也是在alpha值只能为0或1的前提下。表格里“R”表示涂红色，“B”表示涂蓝色，“0”表示涂透明色。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">PorterDuff模式</th>
+<th style="text-align:left">都是透明的</th>
+<th style="text-align:left">都是不透明的</th>
+<th style="text-align:left">只在红色的圆形图片中是透明的</th>
+<th style="text-align:left">只在蓝色的方形图片中是透明的</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">CLEAR</td>
+<td style="text-align:left">0</td>
+<td style="text-align:left">0</td>
+<td style="text-align:left">0</td>
+<td style="text-align:left">0</td>
+</tr>
+<tr>
+<td style="text-align:left">SRC</td>
+<td style="text-align:left">0</td>
+<td style="text-align:left">B</td>
+<td style="text-align:left">B</td>
+<td style="text-align:left">0</td>
+</tr>
+<tr>
+<td style="text-align:left">DST</td>
+<td style="text-align:left">0</td>
+<td style="text-align:left">R</td>
+<td style="text-align:left">0</td>
+<td style="text-align:left">R</td>
+</tr>
+<tr>
+<td style="text-align:left">SRC_OVER</td>
+<td style="text-align:left">0</td>
+<td style="text-align:left">B</td>
+<td style="text-align:left">B</td>
+<td style="text-align:left">R</td>
+</tr>
+<tr>
+<td style="text-align:left">DST_OVER</td>
+<td style="text-align:left">0</td>
+<td style="text-align:left">R</td>
+<td style="text-align:left">B</td>
+<td style="text-align:left">R</td>
+</tr>
+<tr>
+<td style="text-align:left">SRC_IN</td>
+<td style="text-align:left">0</td>
+<td style="text-align:left">B</td>
+<td style="text-align:left">0</td>
+<td style="text-align:left">0</td>
+</tr>
+<tr>
+<td style="text-align:left">DST_IN</td>
+<td style="text-align:left">0</td>
+<td style="text-align:left">R</td>
+<td style="text-align:left">0</td>
+<td style="text-align:left">0</td>
+</tr>
+<tr>
+<td style="text-align:left">SRC_OUT</td>
+<td style="text-align:left">0</td>
+<td style="text-align:left">0</td>
+<td style="text-align:left">B</td>
+<td style="text-align:left">0</td>
+</tr>
+<tr>
+<td style="text-align:left">DST_OUT</td>
+<td style="text-align:left">0</td>
+<td style="text-align:left">0</td>
+<td style="text-align:left">0</td>
+<td style="text-align:left">R</td>
+</tr>
+<tr>
+<td style="text-align:left">SRC_ATOP</td>
+<td style="text-align:left">0</td>
+<td style="text-align:left">B</td>
+<td style="text-align:left">0</td>
+<td style="text-align:left">R</td>
+</tr>
+<tr>
+<td style="text-align:left">DST_ATOP</td>
+<td style="text-align:left">0</td>
+<td style="text-align:left">R</td>
+<td style="text-align:left">B</td>
+<td style="text-align:left">0</td>
+</tr>
+<tr>
+<td style="text-align:left">XOR</td>
+<td style="text-align:left">0</td>
+<td style="text-align:left">0</td>
+<td style="text-align:left">B</td>
+<td style="text-align:left">R</td>
+</tr>
+</tbody>
+</table>
+<p>画图直观感受一下：</p>
+<figure data-type="image" tabindex="3"><img src="https://xushuangqing.github.io/post-images/yong-ColorFilter-wei-an-zhuo-an-niu-zeng-jia-xiao-guo/164542-eb7a3eec22a90ac9.png" alt="对红色的圆形和蓝色的方形两张图片应用PorterDuff的12种模式" loading="lazy"></figure>
+<p>感受就是，这好像和“逻辑运算”有着隐隐的关系-.-，这里DST代表了压在下面的图片，比如例子中的红色的圆形图片，SRC代表了叠在上面的图片，比如例子中的蓝色的方形图片。</p>
+<p>好啦，那么在alpha可以是[0, 1]中的任意值的情况下呢？<br>
+现在我们让红色的圆形和蓝色的方形的都变成半透明的：</p>
+<figure data-type="image" tabindex="4"><img src="https://xushuangqing.github.io/post-images/yong-ColorFilter-wei-an-zhuo-an-niu-zeng-jia-xiao-guo/164542-8dc55d59542d6550.png" alt="红色的圆形，色值BBFF0000" loading="lazy"></figure>
+<figure data-type="image" tabindex="5"><img src="https://xushuangqing.github.io/post-images/yong-ColorFilter-wei-an-zhuo-an-niu-zeng-jia-xiao-guo/164542-9ba2073da33647e7.png" alt="蓝色的方形，色值BB0000FF" loading="lazy"></figure>
+<p>先用这张图直观的感受一下：<br>
+<img src="https://xushuangqing.github.io/post-images/yong-ColorFilter-wei-an-zhuo-an-niu-zeng-jia-xiao-guo/164542-3fc5975d415be10e.png" alt="对红色的圆形和蓝色的方形两张图片应用PorterDuff的12种模式" loading="lazy"></p>
+<p>能发现，这里产生了除了带透明度的蓝色、带透明度的红色之外的颜色，比如SRC_OVER和DST_OVER中重叠部分的颜色。那么这些颜色都是怎么被创造出来的呢？安卓的官方文档中记载了PorterDuff的各种模式的计算公式。</p>
+<figure data-type="image" tabindex="6"><img src="https://xushuangqing.github.io/post-images/yong-ColorFilter-wei-an-zhuo-an-niu-zeng-jia-xiao-guo/164542-51814768e6c0640b.png" alt="官方文档上的公式" loading="lazy"></figure>
+<p>虽然第一眼看不太懂，但是查了一下各个变量代表的意思：</p>
+<blockquote>
+<p>Sa全称为Source alpha表示源图的Alpha通道；<br>
+Sc全称为Source color表示源图的颜色；<br>
+Da全称为Destination alpha表示目标图的Alpha通道；<br>
+Dc全称为Destination color表示目标图的颜色；<br>
+得到的结果以[alpha, color]的形式表示。</p>
+</blockquote>
+<p>虽然我想尽力多知道一些为什么，但是好多地方还是不那么理解，所以目前只能知道这些TAT：</p>
+<ol>
+<li>两张图“重叠部分”之外的颜色，要么是透明，要么就是原来的颜色；</li>
+<li>CLEAR模式下，整张图都是透明的；</li>
+<li>SRC模式下得到的图，就是SRC；DST模式下得到的图，就是DST；</li>
+</ol>
+<p>对了，除了这12中模式，PorterDuff中还剩下的6种模式（ADD、DARKEN、LIGHTEN、MULTIPLY、OVERLAY、SCREEN）是什么呢？<br>
+如果我没理解错的话，这6种模式得到的效果，和Photoshop里对应的混合模式得到的效果是一致的（好像MULTIPLY是不完全一致0.0）。</p>
+<p>效果：</p>
+<figure data-type="image" tabindex="7"><img src="https://xushuangqing.github.io/post-images/yong-ColorFilter-wei-an-zhuo-an-niu-zeng-jia-xiao-guo/164542-a4c92e9513eb6c41.png" alt="另外6种PorterDuff模式" loading="lazy"></figure>
+<hr>
+<p>终于把PorterDuff的几种模式整理了一下，现在回到最开头的问题：应该怎么在安卓的button中实现iOS上的点击效果呢？<br>
+Drawable类中有一个setColorFilter()方法，它可以接收两个参数：颜色的色值和PorterDuff模式。通过setColorFilter()设置颜色，相当于在Drawable对象上加上了一层纯色，并采用对应PorterDuff模式来显示得到最终效果。<br>
+通过Button类中getBackground()，我们可以得到按钮的图标对应的Drawable对象，setColorFilter()方法正好可以施加在按钮的图标上。<br>
+考虑到我们需要得到的最终效果是，背景图案上透明的部分仍然透明，而背景图案上不透明的部分蒙上设置的颜色，所以可以选择SRC_ATOP模式或者MULTIPLY模式。</p>
+<p>使用SRC_ATOP模式的代码片段：</p>
+<pre><code>button.setOnTouchListener(new View.OnTouchListener() {
+    @Override
+    public boolean onTouch(View view, MotionEvent event) {
+        Button touchedButton = (Button)view;
+        switch (event.getAction()) {
+            case MotionEvent.ACTION_DOWN:
+                touchedButton.getBackground().setColorFilter(0x77FFFF00, PorterDuff.Mode.SRC_ATOP);
+                touchedButton.invalidate();
+                break;
+            case MotionEvent.ACTION_CANCEL:
+            case MotionEvent.ACTION_UP:
+                touchedButton.getBackground().clearColorFilter();
+                touchedButton.invalidate();
+                break;
+        }
+        return true;
+    }
+});
+</code></pre>
+<p>效果：</p>
+<figure data-type="image" tabindex="8"><img src="https://xushuangqing.github.io/post-images/yong-ColorFilter-wei-an-zhuo-an-niu-zeng-jia-xiao-guo/164542-fb84e3e26534c99a.png" alt="按钮正常状态时" loading="lazy"></figure>
+<figure data-type="image" tabindex="9"><img src="https://xushuangqing.github.io/post-images/yong-ColorFilter-wei-an-zhuo-an-niu-zeng-jia-xiao-guo/164542-1cf94bf069d2f1a0.png" alt="按钮被按下时" loading="lazy"></figure>
+<hr>
+<p>写这篇文章时遇到的一个问题：</p>
+<p>文章中红色圆形和蓝色方块的例子，是我在安卓sample code的基础上加以修改然后生成的图片。（虽然传说android studio自带sample code，但是不知道我这出了什么问题没弄出来，所以参考的是<a href="http://alvinalexander.com/java/jwarehouse/android-examples/platforms/android-3/samples/ApiDemos/src/com/example/android/apis/graphics/Xfermodes.java.shtml">这里的</a>。）这段代码生成出来的图片应该是这样的（随便google一下全是这张图-.-）：</p>
+<figure data-type="image" tabindex="10"><img src="https://xushuangqing.github.io/post-images/yong-ColorFilter-wei-an-zhuo-an-niu-zeng-jia-xiao-guo/164542-cbf94d971fbac704.png" alt="嗯，就是这张~" loading="lazy"></figure>
+<p>让我觉得很奇怪的地方是，这里的CLEAR不是全透明的。我奇怪了很久google了很久也改代码改了很久，确认我对CLEAR的理解没有错。最后发现了真相：</p>
+<blockquote>
+<p>造成这个问题的原因是硬件加速。需要在View中关闭硬件加速才能得到正确的结果。<br>
+比如在构造函数中调用：<br>
+setLayerType(View.LAYER_TYPE_SOFTWARE, null);</p>
+</blockquote>
+<p>关闭硬件加速后，就能生成正确的结果了。生成之后，我发现上张图中的Darken和Lighten也是错误的哟。</p>
+<hr>
+<p>参考资料：<br>
+<a href="http://stackoverflow.com/questions/7175873/click-effect-on-button-in-android">click effect on button in Android</a><br>
+<a href="http://ssp.impulsetrain.com/porterduff.html">Porter/Duff Compositing and Blend Modes</a><br>
+<a href="http://developer.android.com/intl/zh-cn/reference/android/graphics/PorterDuff.Mode.html">PorterDuff.Mode</a><br>
+<a href="http://en.wikipedia.org/wiki/Alpha_compositing">Alpha compositing</a><br>
+<a href="http://stackoverflow.com/questions/11337679/porterduffxfermode-clear-a-section-of-a-bitmap">PorterduffXfermode: Clear a section of a bitmap</a><br>
+<a href="http://www.cnblogs.com/tianzhijiexian/p/4297172.html">详解Paint的setXfermode</a><br>
+<a href="http://alvinalexander.com/java/jwarehouse/android-examples/platforms/android-3/samples/ApiDemos/src/com/example/android/apis/graphics/Xfermodes.java.shtml">Android example source code file (Xfermodes.java)</a></p>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/ge-shi-hua-xian-shi-ri-qi---shi-jian-de-yi-dian-zong-jie/">
+              <h3 class="post-title">
+                下一篇：格式化显示日期-时间的一点总结
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

@@ -1,0 +1,142 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>NSDecimalNumber持久化精度溢出的坑(╥﹏╥) | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">NSDecimalNumber持久化精度溢出的坑(╥﹏╥)</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2016-11-14</span>
+            
+          </div>
+          <div class="post-content">
+            <p>最近遇到了一个问题，将一个<code>NSNumber</code>对象存入<code>NSUserDefaults</code>，取出来的数值和存入前的数值竟然不一致。</p>
+<p>比如存入的数值为<code>6350939786827530754</code>，但取出的数值变成了<code>6350939786827531264</code>。</p>
+<p>这个数并没有超过<code>long long</code>的范围，从数值变化的形势（只有末尾几位发生了变化），可以判断这个数值发生了精度溢出。</p>
+<p>但为什么将一个<code>NSNumber</code>存入<code>NSUserDefaults</code>再取出来之后，会发生精度溢出呢？（恐慌脸）查看了一下，存入<code>NSUserDetaults</code>的那个<code>NSNumber</code>对象，实际是一个<code>NSDecimalNumber</code>对象，即<code>NSNumber</code>的一个子类。在调用系统的JSON解析库时，数值较大的数会被解析为一个<code>NSDecimalNumber</code>对象。</p>
+<p>和<code>NSNumber</code>不同的是，<code>NSDecimalNumber</code>的<code>objCType</code>属性，返回的永远是<code>d</code>，即double，<a href="https://developer.apple.com/reference/foundation/nsdecimalnumber/1409042-objctype">官方文档</a>中有这样的说明：</p>
+<blockquote>
+<p>For a decimal number object, this property always contains “d” (for double).</p>
+</blockquote>
+<p>而在存入<code>NSUserDefaults</code>中时，<code>NSDecimalNumber</code>的<code>objCType</code>方法会被调用，<code>NSUserDefaults</code>应该会通过判断<code>objCType</code>来决定如何将数据持久化到硬盘。由于<code>NSDecimalNumber</code>的<code>objCType</code>永远为d，所以在持久化时，它将以double的形式被持久化，导致了精度溢出。<br>
+<img src="https://xushuangqing.github.io/post-images/NSDecimalNumber-chi-jiu-hua-jing-du-yi-chu-de-keng-(%E2%95%A5%EF%B9%8F%E2%95%A5)/164542-06ace4e7c3a3a644.png" alt="" loading="lazy"></p>
+<p>不仅仅是存入<code>NSUserDefaults</code>中，在存入sqlite和存入Core Data时，<code>NSDecimalNumber</code>都有可能遇到精度溢出的问题（真坑）。</p>
+<p>解决方法可能有这么几种：<br>
+1.在持久化之前，将<code>NSDecimalNumber</code>对象转化为<code>NSNumber</code>对象；<br>
+2.在持久化之前，将<code>NSDecimalNumber</code>归档为<code>NSData</code>，取出后unarchive回去<br>
+3.更简单粗暴的方法：持久化之前将<code>NSDecimalNumber</code>转化成<code>NSString</code>，取出时将<code>NSString</code>再转回数值</p>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/ji-lu-dui-iOS10-de-shi-pei-gong-zuo-ʕ-•ᴥ•ʔ/">
+              <h3 class="post-title">
+                下一篇：记录对iOS10的适配工作ʕ •ᴥ•ʔ
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

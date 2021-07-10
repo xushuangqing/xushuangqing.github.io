@@ -1,0 +1,344 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>用iOS10 UserNotifications框架来接收remote notification | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">用iOS10 UserNotifications框架来接收remote notification</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2016-08-31</span>
+            
+          </div>
+          <div class="post-content">
+            <p>这是一篇在新公司写的博客( ´ ▽ ` )ﾉ</p>
+<p>iOS10新增的<code>UserNotifications</code>框架，可以应对remote notification和local notification。这两者在用户的感知上十分类似，但是实现上却几乎是两回事。所以为了思路清晰，这篇博客打算专注于介绍remote notification。</p>
+<hr>
+<h3 id="功能更新">功能更新</h3>
+<br>
+iOS10新增的```UserNotifications```框架，主要有了这样几方面的更新：
+- 用```UserNotifications```框架替换了原先与通知相关的接口，通知文字可分为title、subtitle和body三部分，通知可携带附件
+- 系统在展示通知之前，可以唤起app附带的service extension，并且允许它改动通知的内容
+- 用户在对通知右滑查看、下拉或者3d touch的时候，通知会展开，展开后页面的布局可以由app附带的content extension来决定
+<p><img src="https://xushuangqing.github.io/post-images/yong-iOS10-UserNotifications-kuang-jia-lai-jie-shou-remote-notification/164542-61ad0059f0c79a2a.jpg" alt="" loading="lazy"><br>
+<img src="https://xushuangqing.github.io/post-images/yong-iOS10-UserNotifications-kuang-jia-lai-jie-shou-remote-notification/164542-34567cfeb670c488.PNG" alt="" loading="lazy"></p>
+<hr>
+<h3 id="usernotifications框架">UserNotifications框架</h3>
+<br>
+在iOS10中，```UserNotifications```框架替换了大部分原先与通知相关的接口。
+<br>
+##### 注册通知
+<br>
+在iOS10中，想要发送通知（不管是local还是remote），首先得经过用户的许可。使用新的接口来向用户申请允许通知：
+<pre><code>UNUserNotificationCenter *un = [UNUserNotificationCenter currentNotificationCenter];
+[un requestAuthorizationWithOptions:UNAuthorizationOptionAlert | UNAuthorizationOptionSound | UNAuthorizationOptionBadge
+                  completionHandler:^(BOOL granted, NSError * _Nullable error) {
+                  }];
+</code></pre>
+<p>要进行remote notification，我们还需要得到用户的device token。获取device token的过程和先前一致：</p>
+<pre><code>[application registerForRemoteNotifications];
+</code></pre>
+<p>然后在</p>
+<pre><code>- (void)application:(UIApplication *)application didRegisterForRemoteNotificationsWithDeviceToken:(NSData *)deviceToken;
+</code></pre>
+<p>方法中获取device token。</p>
+<br>
+##### 支持title、subtitle和body
+<br>
+如果要让通知支持title、subtitle和body，服务端在给出通知时，只要将payload中```alert```字段由字符串改为一个字典就行了。
+<p>原来的payload：</p>
+<pre><code>{
+    &quot;apns&quot; : {
+        &quot;alert&quot; : &quot;This is my body&quot;,
+        ...
+    }
+}
+</code></pre>
+<p>推送给iOS10设备的payload：</p>
+<pre><code>{
+    &quot;apns&quot; : {
+        &quot;alert&quot; : {
+            &quot;title&quot; : &quot;This is my title&quot;,
+            &quot;subtitle&quot; : &quot;This is my subtitle&quot;,
+            &quot;body&quot; : &quot;This is my body&quot;,
+        }
+        ...
+    }
+}
+</code></pre>
+<br>
+##### 携带action的通知
+<br>
+其实从iOS8开始，通知已经可以携带action了。而在iOS10中，通知的action被放在了更明显的位置，与action相关的接口也有了很大变化。
+如何确定决定一个通知应该有哪些action呢？在payload中，这是由category字段决定的。
+<pre><code>{
+    &quot;apns&quot; : {
+        &quot;alert&quot; : &quot;This is my body&quot;,
+        &quot;category&quot; : &quot;my_category&quot;,
+        ...
+    }
+}
+</code></pre>
+<p>如果我们希望一个通知能携带若干个action，我们就需要将若干个action和一个category绑定起来。通知到达前端后，系统会根据category的名字来决定要给这个通知展示哪些action：</p>
+<pre><code>
+UNNotificationAction *dislikeAction = [UNNotificationAction actionWithIdentifier:@&quot;dislike&quot;
+                                                                           title:@&quot;It's boring&quot;
+                                                                         options:UNNotificationActionOptionAuthenticationRequired | UNNotificationActionOptionDestructive];
+UNNotificationAction *favoriteAction = [UNNotificationAction actionWithIdentifier:@&quot;favorite&quot;
+                                                                            title:@&quot;I like it&quot;
+                                                                          options:UNNotificationActionOptionAuthenticationRequired];
+UNNotificationAction *launchAction = [UNNotificationAction actionWithIdentifier:@&quot;launch&quot;
+                                                                          title:@&quot;Launch my app&quot;
+                                                                        options:UNNotificationActionOptionAuthenticationRequired | UNNotificationActionOptionForeground];
+
+UNNotificationCategory *category = [UNNotificationCategory categoryWithIdentifier:@&quot;my_category&quot;
+                                                                          actions:@[dislikeAction, favoriteAction, launchAction]
+                                                                intentIdentifiers:@[]
+                                                                          options:UNNotificationCategoryOptionNone];
+
+[[UNUserNotificationCenter currentNotificationCenter] setNotificationCategories:[NSSet setWithObject:category]];
+
+</code></pre>
+<p>怎么得知用户选了哪个action并做出相应操作呢？这需要给<code>UNUserNotificationCenter</code>指定一个delegate：</p>
+<pre><code>[UNUserNotificationCenter currentNotificationCenter].delegate = myNotificationDelegate;
+</code></pre>
+<p>按照<code>UNUserNotificationCenter.h</code>中的注释，这个delegate必须在app中被注册（应该意思是不能在extension中注册），并且要在<code>applicationDidFinishLaunching:</code>返回之前完成：</p>
+<pre><code>// The delegate can only be set from an application
+
+// The delegate must be set before the application returns from applicationDidFinishLaunching:.
+</code></pre>
+<p>然后在delegate的类中实现</p>
+<pre><code>// The method will be called on the delegate when the user responded to the notification by opening the application, dismissing the notification or choosing a UNNotificationAction. The delegate must be set before the application returns from applicationDidFinishLaunching:.
+- (void)userNotificationCenter:(UNUserNotificationCenter *)center didReceiveNotificationResponse:(UNNotificationResponse *)response withCompletionHandler:(void(^)())completionHandler;
+</code></pre>
+<p>方法，通过<code>response.notification.request.content.categoryIdentifier</code>和<code>response.actionIdentifier</code>就可以得知用户选择的action了。</p>
+<p>即便app已经被系统杀死，但只要用户操作了通知，这个方法就会被调用。</p>
+<p>除了我们自定义的<code>actionIdentifier</code>，其实iOS还为我们定义了两个<code>actionIdentifier</code>，分别是</p>
+<pre><code>UNNotificationDefaultActionIdentifier
+</code></pre>
+<p>和</p>
+<pre><code>UNNotificationDismissActionIdentifier
+</code></pre>
+<p>分别表示用户点击通知唤起app，和用户清除掉了通知。</p>
+<p>但是这里有个坑，用户点击通知本身唤起app，和用户点击某个标记了<code>UNNotificationActionOptionForeground</code>的action唤起app，看似是类似的操作，但在</p>
+<pre><code>- (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions;
+</code></pre>
+<p>中，前者唤起的app会携带合理的<code>launchOption</code>，而后者唤起的app，<code>launchOption</code>却为空。ʕ •ᴥ•ʔ</p>
+<br>
+##### app在前台时展示通知
+<br>
+在iOS10以前，当app在前台时，通知是不会被展示在通知中心的，只能通过
+<pre><code>- (void)application:(UIApplication *)application didReceiveRemoteNotification:(NSDictionary *)userInfo;
+</code></pre>
+<p>方法收获到通知，然后在app内通过弹窗等方式自行展示。</p>
+<p>但是iOS10支持当app在前台时，也在通知中心展示通知。</p>
+<p>上一段中我们已经为<code>UNUserNotificationCenter</code>注册了一个delegate，在这个delegate中，实现方法：</p>
+<pre><code>- (void)userNotificationCenter:(UNUserNotificationCenter *)center willPresentNotification:(UNNotification *)notification withCompletionHandler:(void (^)(UNNotificationPresentationOptions options))completionHandler;
+</code></pre>
+<p>这个方法只有当app在前台收到通知时才会被调用。当这个方法实现之后，app在前台时收到通知时，通知中心也可以弹出了。同时</p>
+<pre><code>- (void)application:(UIApplication *)application didReceiveRemoteNotification:(NSDictionary *)userInfo;
+</code></pre>
+<p>便不会被调用了。</p>
+<hr>
+<h3 id="notification-service-extension">notification service extension</h3>
+<br>
+给app添加service extension后，系统会在收到通知后唤醒它，并允许它修改通知的内容，之后再展示这个通知。
+service extension只对remote notification起作用，local notification是无法唤起它的。
+<br>
+##### 改变通知内容
+<br>
+如果想要让系统唤起service extension的话，payload必须符合这样几个条件：
+<ul>
+<li>必须增加<code>mutable-content</code>字段并为<code>1</code>，这表示允许客户端修改这个通知：</li>
+</ul>
+<pre><code>{
+    &quot;apns&quot; : {
+        &quot;alert&quot; : &quot;This is my body&quot;,
+        &quot;mutable-content&quot; : 1,
+        ...
+    }
+}
+</code></pre>
+<ul>
+<li>这个通知必须展示一个alert，如果只是一个修改badge的通知的话，是不会唤起service extension的</li>
+<li>静默推送是不能唤起service extension的，所以payload中不能有<code>&quot;content-available&quot; : 1</code>字段。</li>
+</ul>
+<p>在Xcode8中创建一个service extension，Xcode会自动填充模板代码，其中我们可以看到在</p>
+<pre><code>- (void)didReceiveNotificationRequest:(UNNotificationRequest *)request withContentHandler:(void (^)(UNNotificationContent * _Nonnull))contentHandler;
+</code></pre>
+<p>方法中，第三方程序员可以修改即将展示的通知内容。</p>
+<p>如果这是一个带附件的通知的话，这个方法内需要启动附件的下载。</p>
+<p>当通知的内容被更改完毕后，需要调用<code>contentHandler()</code>代码块，并把修改完成后的通知内容作为参数传入。</p>
+<p>如果在指定的时间内，<code>contentHandler()</code>代码块都没能被调用的话，系统会调用<code>serviceExtensionTimeWillExpire</code>方法。<br>
+比如一个通知想要修改标题，也想下载附件，但是网络状况导致附件下载超时，<code>serviceExtensionTimeWillExpire</code>就回被调用。在这个方法中，程序员可以让系统展示仅修改了标题而没有附件的通知。</p>
+<p>实践中发现的几个问题（使用Xcode8-beta6）：</p>
+<ol>
+<li>如果<code>didReceiveNotificationRequest:withContentHandler:</code>方法在执行中途crash了，那么系统会展示原始的通知；</li>
+<li><code>UNMutableNotificationContent</code>中的<code>title</code>，<code>subtitle</code>等字段都是用<code>copy</code>修饰的，如果给它们赋值为<code>nil</code>的话，系统会展示原始的通知；</li>
+</ol>
+<br>
+##### 让通知携带附件
+<br>
+因为payload有大小限制，所以如果remote notification想要携带附件，那么payload上只能带上如附件下载地址之类的信息，等通知到达客户端后由service extension下载附件到本地，然后在初始化```UNNotificationAttachment```对象时传入附件在本地的URL。
+<pre><code>NSError *error = nil;
+UNNotificationAttachment *attachment = [UNNotificationAttachment attachmentWithIdentifier:@&quot;my_identifier&quot;
+                                                                                      URL:localURL
+                                                                                  options:nil
+                                                                                    error:&amp;error];
+if (attachment) {
+    myUNNotificationContent.attachments = @[attachment];
+}
+</code></pre>
+<p>初始化<code>UNNotificationAttachment</code>对象时，可以传入<code>option</code>参数。这里的<code>option</code>参数可以强制指定附件的类型，可以选择是否展示缩略图，以及缩略图截取自附件的哪一帧、哪一部分。</p>
+<p>目前iOS10通知只将几种格式的图片、音频和视频作为附件，附件的大小也有一定限制，具体可以看<a href="https://developer.apple.com/reference/usernotifications/unnotificationattachment">官方文档</a>中的限制说明。</p>
+<hr>
+<h3 id="notification-content-extension">notification content extension</h3>
+<br>
+利用content extension，用户可以自定义通知展开后的视图。
+<p>比如：<br>
+<img src="https://xushuangqing.github.io/post-images/yong-iOS10-UserNotifications-kuang-jia-lai-jie-shou-remote-notification/164542-535e24c769e57e5a.PNG" alt="这是Xcode8提供的template的效果" loading="lazy"></p>
+<p>在新建了一个content extension之后，我们首先需要关注它的<code>info.plist</code>，其中的<code>NSExtensionAttributes</code>中有这样几个键值对：</p>
+<ul>
+<li>UNNotificationExtensionCategory</li>
+</ul>
+<p>一个app其实可以携带多个content extension，系统通过一个叫做category的字段来区分当用户展开一个通知时，应该唤起哪一个content extension。这和action是类似的。</p>
+<p>所以，如果想要使用content extension的话，需要在payload中增加一个category字段：</p>
+<pre><code>{
+    &quot;apns&quot; : {
+        &quot;alert&quot; : &quot;This is my body&quot;,
+        &quot;category&quot; : &quot;my_category&quot;,
+        ...
+    }
+}
+</code></pre>
+<p>然后在<code>info.plist</code>的<code>UNNotificationExtensionCategory</code>中填上和payload的category相同的字符串。这样，当用户展开一个通知时，这个content extension也会被系统唤起了。</p>
+<p>category还有制作带action的通知的作用，在下文会讲到。</p>
+<ul>
+<li>UNNotificationExtensionDefaultContentHidden</li>
+</ul>
+<p>如果把这个字段设为<code>YES</code>，那么当用户展开一个通知时，上下的通知界面就能被隐藏。</p>
+<ul>
+<li>UNNoficicationExtensionInitialContentSizeRatio</li>
+</ul>
+<p>当用户展开通知时，content extension可能没能立刻加载完成，在这段短暂的时间内，界面应该有多高，就依靠这个字段来指定。<br>
+试验了一下，这个字段如果设为<code>0</code>是不起作用的，如果想要让通知界面尽可能小，只能设置为<code>0.00001</code>了。</p>
+<hr>
+<h4 id="参考">参考</h4>
+<p><a href="https://developer.apple.com/reference/usernotifications?language=objc">UserNotifications</a><br>
+<a href="https://developer.apple.com/library/ios/documentation/NetworkingInternet/Conceptual/RemoteNotificationsPG/Chapters/WhatAreRemoteNotif.html#//apple_ref/doc/uid/TP40008194-CH102-SW1">Local and Remote Notifications in Depth</a><br>
+<a href="https://developer.apple.com/library/ios/documentation/NetworkingInternet/Conceptual/RemoteNotificationsPG/Chapters/TheNotificationPayload.html#//apple_ref/doc/uid/TP40008194-CH107-SW1">The Remote Notification Payload</a><br>
+<a href="https://onevcat.com/2016/08/notification/">活久见的重构 - iOS 10 UserNotifications 框架解析</a></p>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/zai-kan-yi-yan-class-fang-fa/">
+              <h3 class="post-title">
+                下一篇：再看一眼class方法
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

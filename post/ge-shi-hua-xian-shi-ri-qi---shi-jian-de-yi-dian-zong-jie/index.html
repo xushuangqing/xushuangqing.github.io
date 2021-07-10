@@ -1,0 +1,311 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>格式化显示日期-时间的一点总结 | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">格式化显示日期-时间的一点总结</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2015-04-29</span>
+            
+          </div>
+          <div class="post-content">
+            <p>虽然“按照一定格式显示日期/时间”这个需求已经做了很多次了，但是好像每次做的时候都是google一下人家写的代码，改改必要的东西贴进自己的代码里，其实并不知道这其中应该注意些什么，以及怎样的写法是更合适的。恰逢今天突遇了一个小bug，就认真查看了一下相关文档，把该注意的地方记了下来～</p>
+<hr>
+<p>#####使用NSDateFormatter自带的格式来显示日期/时间<br>
+######<br><br>
+NSDateFormatter自带了几种格式，使用这些格式来显示日期/时间会受到用户在系统设置中设置的个人偏好的影响。这些格式分别是：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">格式名称</th>
+<th style="text-align:left">对应的日期格式</th>
+<th style="text-align:left">对应的时间格式</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">NSDateFormatterNoStyle</td>
+<td style="text-align:left">/</td>
+<td style="text-align:left">/</td>
+</tr>
+<tr>
+<td style="text-align:left">NSDateFormatterShortStyle</td>
+<td style="text-align:left">12/13/52</td>
+<td style="text-align:left">3:30pm</td>
+</tr>
+<tr>
+<td style="text-align:left">NSDateFormatterMediumStyle</td>
+<td style="text-align:left">Jan 12, 1952</td>
+<td style="text-align:left">3:30:32pm</td>
+</tr>
+<tr>
+<td style="text-align:left">NSDateFormatterLongStyle</td>
+<td style="text-align:left">January 12, 1952</td>
+<td style="text-align:left">3:30:32pm</td>
+</tr>
+<tr>
+<td style="text-align:left">NSDateFormatterFullStyle</td>
+<td style="text-align:left">Tuesday, April 12, 1952 AD</td>
+<td style="text-align:left">3:30:42pm PST</td>
+</tr>
+</tbody>
+</table>
+<p>通过给NSDateFormatter的对象分别设置dateStyle和timeStyle，可以将NSDate对象转换成对应格式的字符串。<br>
+<a href="https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/DataFormatting/Articles/dfDateFormatting10_4.html#//apple_ref/doc/uid/TP40002369-SW1">官方文档</a>中有这样的示例代码：</p>
+<pre><code>NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
+[dateFormatter setDateStyle:NSDateFormatterMediumStyle];
+[dateFormatter setTimeStyle:NSDateFormatterNoStyle];
+
+NSDate *date = [NSDate dateWithTimeIntervalSinceReferenceDate:162000];
+
+NSString *formattedDateString = [dateFormatter stringFromDate:date];
+NSLog(@&quot;formattedDateString: %@&quot;, formattedDateString);
+// Output for locale en_US: &quot;formattedDateString: Jan 2, 2001&quot;.
+</code></pre>
+<hr>
+<p>#####国际化<br>
+######<br><br>
+在使用NSDateFormatter的时候来格式化一个日期时，实际上用户的一些个人偏好也会默认的被考虑进去。上面的这段示例代码在我的mac（语言为简体中文，北京时间）中就会输出：</p>
+<pre><code>formattedDateString: 2001年1月3日
+</code></pre>
+<p>NSDateFormatter类中有一个property叫做locale，这个property会影响输出的日期格式，默认情况下，这个locale就是用户的currentLocale。<br>
+NSLocale是与国际化相关的基础类，使用<code>[NSLocale currentLocale]</code>可以得到当前用户关于国际化的一些设定，包括语言、日期和时间格式等。<br>
+locale不是用户的默认语言，虽然它们有时会很相似。<a href="https://developer.apple.com/library/ios/documentation/MacOSX/Conceptual/BPInternational/InternationalizingLocaleData/InternationalizingLocaleData.html">官方文档</a>上举了一个例子：一个居住在德国的说英语的人可能会选择英语作为他的默认语言，选择德国作为他的地区，那么系统的文字将是英文，但是日期、时间和数字可能会跟随德国习惯的格式，比如在时间上使用24小时制。</p>
+<p>在OS X中，可以到“系统偏好设置-&gt;语言与地区”中设置当前的locale，在iOS中则可以到“设置-&gt;通用-&gt;语言与地区”中进行设置。</p>
+<p>比如，把“日历”从“公历”改成“日本日历”，则上一段代码的输出就变成了：</p>
+<pre><code>平成13年1月3日
+</code></pre>
+<p>使用代码</p>
+<pre><code>NSLocale *locale = [dateFormatter locale];
+NSCalendar *calendar = [locale objectForKey:NSLocaleCalendar];
+NSLog(@&quot;calendar: %@&quot;, calendar.calendarIdentifier);
+</code></pre>
+<p>可以查看当前dateFormatter使用的calendar类型：</p>
+<pre><code>calendar: japanese
+</code></pre>
+<p>所以，如果想要在显示日期/时间时排除用户的locale设置，则需要自定义一个NSLocale对象。比如对dateFormatter设置：</p>
+<pre><code>NSLocale *locale = [[NSLocale alloc] initWithLocaleIdentifier:@&quot;en_US&quot;];
+[dateFormatter setLocale:locale];
+</code></pre>
+<p>此时，虽然我的设备的语言是简体中文，日历是日本日历，示例代码输出的却是：</p>
+<pre><code>formattedDateString: Jan 3, 2001
+</code></pre>
+<p>在创建NSLocale对象时需要使用localeIdentifier，例如en_US，fr_FR，ja_JP和en_GB，这些标识符包含一个语言码（例如en代表英语）和一个地区码（例如US代表美国）。<br>
+还可以在localeIdentifier中设置更多信息，比如calendar的类型：</p>
+<pre><code>NSLocale *locale = [[NSLocale alloc] initWithLocaleIdentifier:@&quot;zh_CN@calendar=chinese&quot;];
+[dateFormatter setLocale:locale];
+</code></pre>
+<p>得到输出：</p>
+<pre><code>formattedDateString: 庚辰年十二月九日
+</code></pre>
+<hr>
+<p>#####自定义格式<br>
+######<br><br>
+######自定义固定的格式<br>
+通过NSDateFormatter中的setDateFormat:方法可以自定义日期/时间的格式。格式遵循<a href="http://www.unicode.org/reports/tr35/tr35-31/tr35-dates.html#Date_Format_Patterns">Unicode Technical Standard #35</a>。<br>
+<a href="https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/DataFormatting/Articles/dfDateFormatting10_4.html#//apple_ref/doc/uid/TP40002369-SW1">官方文档</a>中有这样的示例代码：</p>
+<pre><code>NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
+[dateFormatter setDateFormat:@&quot;yyyy-MM-dd 'at' HH:mm&quot;];
+ 
+NSDate *date = [NSDate dateWithTimeIntervalSinceReferenceDate:162000];
+ 
+NSString *formattedDateString = [dateFormatter stringFromDate:date];
+NSLog(@&quot;formattedDateString: %@&quot;, formattedDateString);
+// For US English, the output may be:
+// formattedDateString: 2001-01-02 at 13:00
+</code></pre>
+<p>######自定义用户友好的格式<br>
+好吧，在某个时刻之前，我只知道<code>setDateFormat:</code>这个方法，直到有一天，我发现用“MMM d”格式在英文下显示良好（比如“Jan 13”），但是换到中文，就变成了奇怪的“1月 3”。<br>
+抓狂了很久，可是设计稿里要求不显示年份，所以NSDateFormatter预设的格式都不符合这一需求。直到我google出了<code>dateFormatFromTemplate:options:locale:</code>这一方法。（实际上，需要显示给用户看的日期/时间不应该用<code>setDateFormat:</code>来设置格式，可能会出现各种问题。）</p>
+<p><code>dateFormatFromTemplate:options:locale:</code> 这个方法会重新安排给定的自定义格式，来适应指定的locale。</p>
+<p>官方的示例代码：</p>
+<pre><code>NSDateFormatter *dateFormatter = [NSDateFormatter new];
+NSString *localeFormatString = [NSDateFormatter dateFormatFromTemplate:@&quot;dMMM&quot; options:0 locale:dateFormatter.locale];
+dateFormatter.dateFormat = localeFormatString;
+NSString *localizedString = [dateFormatter stringFromDate:[NSDate date]];
+</code></pre>
+<p>其中，<code>dateFormatFromTemplate:options:locale:</code>中指定的格式只是表示了哪些元素（比如示例代码里的月份和日期）需要加入，这些元素的顺序是无关的。</p>
+<p>官方举的几个例子：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Language (Region)</th>
+<th style="text-align:left">Date using format string “MMM d”</th>
+<th style="text-align:left">Date using template “dMMM”</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">English (United States)</td>
+<td style="text-align:left">Nov 13</td>
+<td style="text-align:left">Nov 13</td>
+</tr>
+<tr>
+<td style="text-align:left">French (France)</td>
+<td style="text-align:left">nov. 13</td>
+<td style="text-align:left">13 nov.</td>
+</tr>
+<tr>
+<td style="text-align:left">Chinese (China)</td>
+<td style="text-align:left">11月13</td>
+<td style="text-align:left">11月13日</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<p>#####Tips<br>
+######<br></p>
+<ol>
+<li>
+<p>需要注册Notification来监听locale和时区的改变<br>
+这两个Notification分别是：<br>
+<code>NSCurrentLocaleDidChangeNotification</code>和<code>NSSystemTimeZoneDidChangeNotification</code>。</p>
+</li>
+<li>
+<p>NSDateFormatter（其实是任何一个NSFormatter）的创建都是很昂贵的，所以在实际的开发中，应该尽可能的重复利用每个formatter。推荐的做法是，每个需要用到的formatter只创建一次。</p>
+</li>
+<li>
+<p>在iOS7和OS X v10.9之前，NSDateFormatter不是线程安全的。</p>
+</li>
+<li>
+<p>可以通过设置<code>dateFormatter.doesRelativeDateFormatting = YES;</code>，让日期在某些语言下，显示为用户友好的&quot;Today&quot;、“Tomorrow”等。<br>
+比如：</p>
+</li>
+</ol>
+<pre><code>NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
+[dateFormatter setDateStyle:NSDateFormatterFullStyle];
+[dateFormatter setTimeStyle:NSDateFormatterShortStyle];
+dateFormatter.doesRelativeDateFormatting = YES;
+NSString *formattedDateString = [dateFormatter stringFromDate:[NSDate date]];
+NSLog(@&quot;formattedDateString: %@&quot;, formattedDateString);
+</code></pre>
+<p>输出：</p>
+<pre><code>formattedDateString: 今天 下午2:11
+</code></pre>
+<p>至于到底能把“今天”、“明天”、“后天”、“昨天”、“前天”等中的几个转换成relative format，则和语言有关。<br>
+（粗略尝试了一下，中文可以支持“前天”到“后天”，英文只能支持“yesterday”到“tomorrow”）</p>
+<ol start="5">
+<li>iOS8之后，NSDateFormatter（其实也包括其他一些NSFormatter的子类）新增了一个叫formattingContext的property，主要用来确定英文等语言中，输出的字符串首字母是否需要大写的问题。</li>
+</ol>
+<hr>
+<p>#####参考：<br>
+<a href="https://developer.apple.com/library/ios/documentation/MacOSX/Conceptual/BPInternational/InternationalizingLocaleData/InternationalizingLocaleData.html">Internationalization and Localization Guide: Formatting Data Using the Locale Settings</a><br>
+<a href="https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/DataFormatting/Articles/dfDateFormatting10_4.html#//apple_ref/doc/uid/TP40002369-SW1">Data Formatting Guide: Date Formatters</a><br>
+<a href="http://nshipster.com/nsformatter/">NSHipster NSFormatter</a><br>
+<a href="http://nshipster.cn/nslocale/">NSHipster NSLocale</a></p>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/dui-iOS-runtime-de-yi-dian-li-jie-（2）/">
+              <h3 class="post-title">
+                下一篇：对iOS runtime的一点理解（2）
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

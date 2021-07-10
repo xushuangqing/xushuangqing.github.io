@@ -1,0 +1,319 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>《Effective Objective C 2.0》读书笔记 | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">《Effective Objective C 2.0》读书笔记</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2016-05-08</span>
+            
+          </div>
+          <div class="post-content">
+            <p>一个月没更新博客了(´･_･`)最近在工作和生活上都肥肠忙碌，导致学习的时间变少了很多(╥﹏╥)。近一个月唯一的长进就是看完了《Effective Objective-C 2.0》这本书，所以就把看这本书时想到的几点问题记下来写成一篇博客好了。</p>
+<hr>
+<h3 id="向前声明">向前声明</h3>
+<br>
+第2条：在类的头文件中尽量少引入其它文件：
+> 如果在各自头文件中引入对方的头文件，则会导致“循环引用”（chicken-and-egg situation）。当解析其中一个头文件时，编译器会发现它引入了另一个头文件，而那个头文件由回过头来引用第一个头文件。使用#import而非#include指令虽然不会导致死循环，但却意味着这两个类里有一个无法被正确编译。
+<p>“无法被正确编译”会带来什么结果呢？尝试了一下，编译无法通过，编译器报错：</p>
+<pre><code>/Users/xsq/Documents/Developer/XSQReferenceDemo/XSQReferenceDemo/ViewController.h:14:31: 
+Unknown type name 'XSQObject'; did you mean 'NSObject'?
+</code></pre>
+<hr>
+<h3 id="字面量">字面量</h3>
+<br>
+第3条：多用字面量语法，少用与之等价的方法：
+> 在改用字面量语法来创建数组时会遇到这个问题。下面这段代码分别以两种语法创建数组：
+<blockquote>
+<p>id object1 = /* ... <em>/;<br>
+id object2 = /</em> ... <em>/;<br>
+id object3 = /</em> ... */;</p>
+</blockquote>
+<blockquote>
+<p>NSArray *arrayA = [NSArray arrayWithObjects:object1, object2, object3, nil];<br>
+NSArray *arrayB = @[object1, object2, object3];</p>
+</blockquote>
+<blockquote>
+<p>大家想想：如果object1和object3都指向了有效的Objective-C对象，而object2是nil，那么会出现什么情况呢？按字面量语法创建数组arrayB时会抛出异常。arrayA虽然能创建出来，但是其中却只含有object1一个对象。原因在于，“arrayWithObjects:”方法会依次处理各个参数，直到发现nil为止，由于object2是nil，所以该方法会提前结束。</p>
+</blockquote>
+<p>尝试了一下，创建arrayB的时候抛出了异常：</p>
+<pre><code>Terminating app due to uncaught exception 'NSInvalidArgumentException',
+reason: '*** -[__NSPlaceholderArray initWithObjects:count:]: attempt to insert nil object from objects[1]'
+</code></pre>
+<p>而从堆栈信息中可以看到，字面量语法创建arrayB的时候，使用了<code>arrayWithObjects:count:</code>方法，而不是<code>arrayWithObjects:</code>方法。</p>
+<pre><code>    frame #0: 0x0000000105a3ddbb libobjc.A.dylib`objc_exception_throw
+    frame #1: 0x0000000105e82a52 CoreFoundation`-[__NSPlaceholderArray initWithObjects:count:] + 290
+    frame #2: 0x0000000105edf0b4 CoreFoundation`+[NSArray arrayWithObjects:count:] + 52
+</code></pre>
+<hr>
+<h3 id="hash">hash</h3>
+<br>
+第8条：理解“对象等同性”这一概念：
+> 如果“isEqual:”方法判定两个对象相等，那么其hash方法也必须返回同一个值。但是，如果两个对象的hash方法返回同一个值，那么“isEqual:”方法未必会认为两者相等。
+<p><a href="https://developer.apple.com/library/ios/documentation/Cocoa/Reference/Foundation/Protocols/NSObject_Protocol/#//apple_ref/occ/intfm/NSObject/isEqual:">官方文档</a>中也有类似的介绍：</p>
+<blockquote>
+<p>If two objects are equal, they must have the same hash value. This last point is particularly important if you define isEqual:<br>
+ in a subclass and intend to put instances of that subclass into a collection. Make sure you also define <a href="https://developer.apple.com/library/ios/documentation/Cocoa/Reference/Foundation/Protocols/NSObject_Protocol/#//apple_ref/occ/intfm/NSObject/hash">hash</a><br>
+ in your subclass.</p>
+</blockquote>
+<p>当需要把一个对象放入一个collection中时，hash方法尤其需要注意。<a href="https://developer.apple.com/library/ios/documentation/Cocoa/Reference/Foundation/Protocols/NSObject_Protocol/#//apple_ref/occ/intfm/NSObject/hash">官方文档</a>中也说明了，如果一个可变的对象被放入了依赖hash方法来定位的collection中，期间这个对象的hash值不应该被改变：</p>
+<blockquote>
+<p>If a mutable object is added to a collection that uses hash values to determine the object’s position in the collection, the value returned by the hash<br>
+ method of the object must not change while the object is in the collection.</p>
+</blockquote>
+<hr>
+<h3 id="类族">类族</h3>
+<br>
+第9条：以“类族模式”隐藏实现细节：
+> 在使用NSArray的alloc方法来获取实例时，该方法首先会分配一个属于某类的实例，此实例充当“占位数组”。该数组稍后会转为另一个类的实例，而那个类则是NSArray的实体子类。
+<p>关于类族深层的东西，这本书没有讲太多。但是至少可以了解到，程序员没法预料初始化得到的实例的具体类型，所以在比较类型时，使用</p>
+<pre><code>[maybeAnArray class] == [NSArray class]
+</code></pre>
+<p>和</p>
+<pre><code>[maybeAnArray isMemberOfClass:[NSArray class]]
+</code></pre>
+<p>很可能得到与预料中不一致的结果。</p>
+<hr>
+<h3 id="关联对象的key">关联对象的key</h3>
+<br>
+第10条：在既有类中使用关联对象存放自定义数据：
+> 我们可以把某对象想象成NSDictionary，把关联到该读喜庆的值理解为字典中的条目，于是，存取关联对象的值就相当于在NSDictionary对象上调用[object setObject:value forKey:key]与[object objectForKey:key]方法。然而两者之间有个重要差别：设置关联对象时用的键是个“不透明的指针”（opaque pointer）。如果在两个键上调用“isEqual:”方法的返回值是YES，那么NSDictionary就认为二者相等；然而在设置关联对象值时，若想令两个键匹配到同一个值，则二者必须是完全相同的指针才行。鉴于此，在设置关联对象值时，通常使用静态全局变量做键。
+<p>虽然用静态全局变量做键已经成为了一种套路，但是以前真没想过它的键是个“不透明的指针”这个问题。</p>
+<hr>
+<h3 id="designated-initializer">designated initializer</h3>
+<br>
+第16条：提供“全能初始化方法”：
+> 如果创建类实例的方式不止一种，那么这个类就会有多个初始化方法。这当然很好，不过仍然要在其中选定一个作为全能初始化方法（designated initializer），令其它初始化方法都来调用它。
+<p>官方文档中也有类似的说法：</p>
+<blockquote>
+<p>When you define a subclass, you must be able to identify the designated initializer of the superclass and invoke it in your subclass’s designated initializer through a message to super. You must also make sure that inherited initializers are covered in some way. And you may provide as many convenience initializers as you deem necessary. When designing the initializers of your class, keep in mind that designated initializers are chained to each other through messages to super; whereas other initializers are chained to the designated initializer of their class through messages to self.</p>
+</blockquote>
+<blockquote>
+<p>在定义一个类的时候，程序员必须认出它父类的designated initializer，然后在子类的designated initializer中给它发送消息。程序员还必须确保继承的其它初始化方法也要被处理到，程序员还可以根据需要新增几个初始化方法。<br>
+在设计一个类的初始化方法时，确保子类的designated initializer连上了父类的designated initializer，而其它的初始化方法必须连上当前类的designated initializer。</p>
+</blockquote>
+<hr>
+<h3 id="debugdescription">debugDescription</h3>
+<br>
+第17条：实现description方法：
+> NSObject协议中还有个方法要注意，那就是debugDescription，此方法的用意与description非常相似。二者区别在于，debugDescription方法时开发者在调试器中以控制台命令打印对象时才调用的。
+<p>以前没有注意过，查了一下<a href="">官方文档</a>中的说明：</p>
+<blockquote>
+<p>debugDescription: Returns a string that describes the contents of the receiver for presentation in the debugger.</p>
+</blockquote>
+<hr>
+<h3 id="实例变量">实例变量</h3>
+<br>
+第27条：使用“class-continuation分类”隐藏实现细节：
+> 为什么能在其中定义方法和实例变量呢？只因有“稳固的ABI”这一机制，使得我们无需知道对象大小即可使用它。
+<p>第6条：理解“属性”这一概念：</p>
+<blockquote>
+<p>Objective-C的做法是，把实例变量当作一种存储偏移量所用的“特殊变量”，交由“类对象”保管。偏移量会在运行期查找，如果类的定义变了，那么存储的偏移量也就变了，这样的话，无论何时访问实例变量，总能使用正确的偏移量。</p>
+</blockquote>
+<p>这是一个很有趣的问题，好像我以前也从来没考虑过。在C++中，对实例变量的访问，会在编译时期被转化为对偏移量的方法。我做了个实验，用C++语言写了个类：</p>
+<pre><code>// BaseClass.h
+#ifndef BaseClass_h
+#define BaseClass_h
+
+#include &lt;stdio.h&gt;
+
+class BaseClass {
+public:
+    char a = 'a';
+    char b = 'b';
+    char c = 'c';
+    void printBase();
+};
+
+#endif /* BaseClass_h */
+</code></pre>
+<pre><code>// BaseClass.cpp
+#include &quot;BaseClass.h&quot;
+
+void BaseClass::printBase() {
+    printf(&quot;a=%c, b=%c, c=%c&quot;, this-&gt;a, this-&gt;b, this-&gt;c);
+}
+</code></pre>
+<p>将BaseClass编译成静态库，然后写一个main函数：</p>
+<pre><code>// main.cpp
+#include &lt;iostream&gt;
+#include &quot;BaseClass.h&quot;
+
+int main(int argc, const char * argv[]) {
+    BaseClass baseClass = BaseClass();
+    baseClass.printBase();
+    return 0;
+}
+</code></pre>
+<p>能正常输出：</p>
+<pre><code>a=a, b=b, c=c
+</code></pre>
+<p>然后我在静态库的头文件BaseClass.h中，注释掉对a和c这两个实例变量的定义，但保持静态库的.a文件不变，再次运行，则输出了奇怪的：</p>
+<pre><code>a=b, b=, c=
+</code></pre>
+<p>这应该可以说明，如果使用C++语言，那么在BaseClass.cpp编译的过程中，对实例变量的访问已经被改为了对一个偏移量的访问。</p>
+<p>但是Objective-C 2.0不是这样做的。<a href="https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/ObjCRuntimeGuide/Articles/ocrtVersionsPlatforms.html#//apple_ref/doc/uid/TP40008048-CH106-SW1">官方文档</a>里有这样的介绍：</p>
+<blockquote>
+<p>The most notable new feature is that instance variables in the modern runtime are “non-fragile”:</p>
+</blockquote>
+<blockquote>
+<p>In the legacy runtime, if you change the layout of instance variables in a class, you must recompile classes that inherit from it.<br>
+In the modern runtime, if you change the layout of instance variables in a class, you do not have to recompile classes that inherit from it.</p>
+</blockquote>
+<p>这个特性牵涉了编译、链接和运行时，感觉如果要深入了解，还需要下很多功夫。所以这里就暂时记录这么多吧(´･_･`)</p>
+<hr>
+<h3 id="dispatch_barrier">dispatch_barrier</h3>
+<br>
+第41条：多用派发队列，少用同步锁
+<blockquote>
+<p>在设置方法中使用了栅栏块之后，对属性的读取操作依然可以并发执行，但是写入操作却必须单独执行了。</p>
+</blockquote>
+<pre><code class="language-objective_c">_syncQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+
+- (NSString *)someString
+{
+    __block NSString *localSomeString;
+    dispatch_sync(_syncQueue, ^{
+        localSomeString = _someString;
+    });
+    return localSomeString;
+}
+
+- (void)setSomeString:(NSString *)someString
+{
+    dispatch_barrier_async(_syncQueue, ^{
+        _someString = someString;
+    });
+}
+</code></pre>
+<p>这里，getter方法必须同步才能读取到有效数据，而setter方法可以让存放数据异步操作，不需要等待其操作完成。使用dispatch_barrier_async是想等到此刻所有getter任务完成后再开始进行setter的操作。</p>
+<p>但是在查阅了dispatch_barrier_async的<a href="https://developer.apple.com/library/mac/documentation/Performance/Reference/GCD_libdispatch_Ref/index.html#//apple_ref/c/func/dispatch_barrier_async">官方文档</a>的过程中，却发现了这样一句说明：</p>
+<blockquote>
+<p>The queue you specify should be a concurrent queue that you create yourself using the dispatch_queue_create function. If the queue you pass to this function is a serial queue or one of the global concurrent queues, this function behaves like the dispatch_async function.</p>
+</blockquote>
+<p>所以书中的这个例子选用了dispatch_get_global_queue可能不是很恰当，按照苹果的说法，此处的dispatch_barrier_async其实就相当于一个dispatch_async？</p>
+<hr>
+<h3 id="nscache">NSCache</h3>
+<br>
+第50条：构建缓存时选用NSCache而非NSDictionary：
+> NSCache胜过NSDictionary之处在于，当系统资源将要耗尽时，它可以自动删减缓存。
+...
+> NSCache并不会“拷贝”键，而是会“保留”它。
+...
+> 另外，NSCache是线程安全的。
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/code-signing，certificate-he-provisioning-profiles/">
+              <h3 class="post-title">
+                下一篇：code signing，certificate和provisioning-profiles
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

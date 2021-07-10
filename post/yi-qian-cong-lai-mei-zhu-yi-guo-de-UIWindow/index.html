@@ -1,0 +1,205 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>以前从来没注意过的UIWindow | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">以前从来没注意过的UIWindow</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2015-08-16</span>
+            
+          </div>
+          <div class="post-content">
+            <p>好久没有更新博客了O.O因为最近工作好忙TAT<br>
+当然忙的时候也积累了很多以前没注意的问题。所以又有了很多能写成博客的素材O.O</p>
+<p>所以这次先来研究一下我以前从来没注意过的UIWindow好了。</p>
+<hr>
+<p>###Window的作用</p>
+<br>
+在iOS中，一个window（也就是一个UIWindow对象）主要有这样几个作用：
+1. 展示app的可视内容；
+2. 将事件分发给视图以及其他对象；
+3. 和app的view controller一起处理屏幕旋转。
+<p>其实在大多数情况下，第三方程序员不用做任何事情，window就能完成这些工作。所以很多时候，只有当这个app需要支持另一个外设的屏幕的时候，程序员才会对window进行操作。</p>
+<hr>
+<p>###创建window</p>
+<br>
+有好几种创建window的方式：
+<br>
+######使用storyboard：
+如果程序员为app创建了一个storyboard，并在info.plist中指定它为main storyboard，那么在app启动的时候，iOS会自动帮程序员做这样几件事情：
+1. 实例化一个window；
+2. 加载main storyboard，并且实例化其中的root view controller；
+3. 将这个view controller赋值给window.rootViewController，并显示这个window。
+<p>######使用nib文件：<br>
+如果不使用storyboard，也可以用nib文件来代替。将一个window对象拖拽到Interface Builder文件中，并将这个文件指定为app的main interface。那么在app启动的时候，iOS也会自动创建window对象。<br>
+为了确保window的大小与屏幕大小吻合，需要在Interface Builder中对window对象勾选Full Screen at Launch这个属性。</p>
+<p>######手写代码：<br>
+当然也可以通过手写代码的方式创建window。比如官方示例代码：</p>
+<pre><code>- (BOOL)application:(UIApplication *)application willFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
+    
+    UIWindow *window = [[UIWindow alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
+    myViewController = [[MyViewController alloc] init];
+    window.rootViewController = myViewController;
+    [window makeKeyAndVisible];
+    
+    return YES;
+}
+</code></pre>
+<p>需要注意的是，window的尺寸永远应该是屏幕的尺寸，不应该考虑状态栏等元素，因为这些是view controller应该处理的问题。</p>
+<hr>
+<p>###Action Sheet和Alert View</p>
+<br>
+知道了window的存在之后，感觉也能知道很多事情。
+<p>比如，iOS中的UIActionSheet和UIAlertView其实是显示在另一个window上的。</p>
+<p>监听<code>UIWindowDidResignKeyNotification</code>，可以发现，当action sheet弹出时，<code>UIWindowDidResignKeyNotification</code>通知被发送了。此时检查app所在的window，发现它已经不再是key window了。</p>
+<hr>
+<p>###悬浮窗</p>
+<br>
+以前我总以为所有的view都是被拘束在UIViewController的view中的，所以一直不知道悬浮窗的效果应该如何实现。但实际上，UIWindow本身就是一个UIView，可以直接在UIWindow上添加子视图，做出悬浮的效果。（虽然这样不符合苹果的设计规范）
+<pre><code>[[[UIApplication sharedApplication].delegate window] addSubview:suspendView];
+</code></pre>
+<p>呈现出视图悬浮在app之上的效果：<br>
+<img src="https://xushuangqing.github.io/post-images/yi-qian-cong-lai-mei-zhu-yi-guo-de-UIWindow/164542-eaaa6224dbaa518e.jpeg" alt="悬浮窗效果" loading="lazy"></p>
+<hr>
+<p>###黑科技？</p>
+<br>
+好奇尝试了一些奇怪的情景O.O
+<p>######如果window没有占满整个屏幕会怎样呢？<br>
+默认情况下，window中的视图依然能照常显示，但是触屏事件无法正常分发。</p>
+<p>官方文档中这样描述：</p>
+<blockquote>
+<p>Because a window doesn’t receive touch events outside of its bounds and views aren’t clipped to the window’s bounds by default, an improperly sized window might not be able to deliver touch events to all its views.</p>
+</blockquote>
+<p>用手写代码的方式可以创建一个任意大小的window，比如在<code>application:willFinishLaunchingWithOptions:</code>方法中写：</p>
+<pre><code>self.window = [[XSQWindow alloc] initWithFrame:CGRectMake(0, 0, 100, 100)];
+</code></pre>
+<p>运行程序时，window中的子视图依然可以照常显示，包括window外的部分，但是在点击window之外的区域时，终端会输出错误信息：</p>
+<pre><code>unexpected nil window in _UIApplicationHandleEventFromQueueEvent, _windowServerHitTestWindow: &lt;XSQWindow: 0x14c614a20; baseClass = UIWindow; frame = (0 0; 200 200); gestureRecognizers = &lt;NSArray: 0x174059740&gt;; layer = &lt;UIWindowLayer: 0x174220e60&gt;&gt;
+</code></pre>
+<p>并且触屏点对应的视图无法接收到这次的触屏事件。</p>
+<p>######如果在一个app中创建多个window会怎么样？<br>
+也是可以做到在一个app中创建多个window的，而且似乎也不会怎么样。<br>
+触屏事件会根据触摸点的位置，被UIApplication分发到对应的window中。</p>
+<hr>
+<p>####参考<br>
+<a href="https://developer.apple.com/library/ios/documentation/UIKit/Reference/UIWindow_Class/index.html">UIWindow Class Reference</a><br>
+<a href="https://developer.apple.com/library/ios/documentation/WindowsViews/Conceptual/WindowAndScreenGuide/WindowScreenRolesinApp/WindowScreenRolesinApp.html#//apple_ref/doc/uid/TP40012555-CH4-SW3">Understanding Windows and Screens</a><br>
+<a href="http://www.cnblogs.com/wendingding/p/3770605.html">iOS开发UI篇—控制器的创建</a><br>
+<a href="http://www.cnblogs.com/smileEvday/archive/2012/11/16/UIWindow.html">关于UIWindow的一点儿思考</a><br>
+<a href="https://developer.apple.com/library/ios/documentation/EventHandling/Conceptual/EventHandlingiPhoneOS/event_delivery_responder_chain/event_delivery_responder_chain.html#//apple_ref/doc/uid/TP40009541-CH4-SW2">Event Delivery: The Responder Chain</a></p>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/dui-OC-zhong-property-de-yi-dian-li-jie/">
+              <h3 class="post-title">
+                下一篇：对OC中property的一点理解
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

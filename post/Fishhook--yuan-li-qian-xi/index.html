@@ -1,0 +1,236 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>Fishhook 原理浅析 | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">Fishhook 原理浅析</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2020-01-07</span>
+            
+          </div>
+          <div class="post-content">
+            <h2 id="一-初识-fishhook">一、初识 fishhook</h2>
+<p>Fishhook 是 facebook 的开源库。官方描述，它的作用是：</p>
+<blockquote>
+<p>... enables dynamically rebinding symbols in Mach-O binaries running on iOS in the simulator and on device</p>
+<p>支持对 iOS 模拟器和设备上运行的 Mach-O 二进制文件，动态地重绑定其中的符号</p>
+</blockquote>
+<p>更浅显的解读是，如果你的程序调用了动态库中的函数 A，可以通过 fishhook，在运行时将“调用函数 A”改为“调用函数 B”。</p>
+<p>Fishhook 的源码只有 250 行，因此可以方便地接入到业务中。</p>
+<h2 id="二-c-函数调用也能篡改">二、C 函数调用也能篡改？</h2>
+<p>我们能理解 OC 中 method swizzling 的原理。因为 OC 有一套运行时机制，因此给 OC 对象 obj 发送消息 call 时，要经过 runtime 的匹配，才能在运行时得出 call 方法的地址，让指令跳转到 call 方法内部。因此，只要在 runtime 匹配的过程中做手脚，就可以将 call 方法篡改为其他方法。</p>
+<p>但是 C 语言中，调用某个函数，指令跳转到某个地址，这是在编译链接时就决定的。看起来我们并不能在运行时改变这个地址。</p>
+<p>但实际上，如果调用的函数是动态库中的，那么，这个二进制程序，在启动前也并不知道动态库中这个函数的地址。这个地址也是运行时计算得到的。<br>
+因此这就给 fishhook 提供了机会。</p>
+<h2 id="三-正常函数的调用过程">三、正常函数的调用过程</h2>
+<p>在了解 fishhook 做了什么之前，我们先一步一步看看，调用一个动态库里的 C 函数，会经过哪些步骤。</p>
+<h3 id="31-macho-背景知识">3.1 MachO 背景知识</h3>
+<p>在开始之前，我们先回顾一下 MachO 的背景知识。</p>
+<blockquote>
+<p>进程是特殊文件在内存中加载得到的结果</p>
+</blockquote>
+<p>一个 iOS app 的进程，就是 MachO 文件在内存中加载得到的结果。</p>
+<figure data-type="image" tabindex="1"><img src="https://xushuangqing.github.io/post-images/Fishhook--yuan-li-qian-xi/164542-a6d3ba75e9b8f886.png" alt="" loading="lazy"></figure>
+<p>比如这是一个 arm64 架构下的 MachO 文件。Mach 加载器会读取 MachO 文件中的加载命令（Load Commands），这些命令决定了如何布局这个进程的内存空间。</p>
+<figure data-type="image" tabindex="2"><img src="https://xushuangqing.github.io/post-images/Fishhook--yuan-li-qian-xi/164542-33b2f09b9d0651e9.png" alt="" loading="lazy"></figure>
+<p>（这里需要注意：内存地址和 MachO 文件的 offset 是两个概念，对于 TEXT 和 DATA 段中的东西，arm64 架构下，可以认为 0x100000000 + offset + ASLR = 内存地址）</p>
+<h3 id="32-printf-调用的过程">3.2 printf() 调用的过程</h3>
+<p>我们以 printf() 这个函数举例。</p>
+<p>以下分析均在 arm64 架构下进行。</p>
+<h4 id="调用-printf-的汇编是什么样">调用 printf() 的汇编是什么样</h4>
+<p>我们知道，当发生一个函数调用时，编译器和静态链接器，会把这个函数调用，成“跳转到某个地址继续执行程序”。</p>
+<p>那么我们首先看看调用 printf() 的汇编是什么样的。</p>
+<figure data-type="image" tabindex="3"><img src="https://xushuangqing.github.io/post-images/Fishhook--yuan-li-qian-xi/164542-e8f004bc9067cd54.png" alt="" loading="lazy"></figure>
+<p>首先，我们将 Xcode 设置为，断点时查看汇编。</p>
+<p>然后在调用 printf() 时打一个断点。运行到这个断点时，我们看到了这样一行汇编代码：</p>
+<figure data-type="image" tabindex="4"><img src="https://xushuangqing.github.io/post-images/Fishhook--yuan-li-qian-xi/164542-6b94d60cad57d1a6.png" alt="" loading="lazy"></figure>
+<figure data-type="image" tabindex="5"><img src="https://xushuangqing.github.io/post-images/Fishhook--yuan-li-qian-xi/164542-f777ac3ec87afdc5.png" alt="" loading="lazy"></figure>
+<pre><code>0x10044e694 &lt;+72&gt;: bl 0x10044ea78 ; symbol stub for: printf
+</code></pre>
+<p>意思是跳转到 0x10044ea78 地址继续执行，并且这个地址，代表了 printf 函数。</p>
+<p>0x10044ea78 地址，实际是什么呢？</p>
+<p>由于 ASLR 技术，我们需要减去 image 的起始地址，才能得到 rebase 之前的地址，用于和 MachO 文件对比。通过 image list 命令得到各个 image 的起始地址后，我们发现，0x10044ea78 落在起始地址为 0x0000000100448000 的主二进制中，二者相减，偏移量为 0x6a78</p>
+<p>0x6ac8 位于 TEXT 段 __stubs 节。说明，调用 printf() 首先跳转到了代码段的某个地址上。</p>
+<h4 id="去找符号表">去找符号表</h4>
+<p>使用 otool -v XSQFishhookDemo -s __TEXT __stubs 查看，得到0x6a78 地址开始的指令为：</p>
+<pre><code>0000000100006a78        nop
+0000000100006a7c        ldr        x16, #0x15dc
+0000000100006a80        br        x16
+</code></pre>
+<p>nop 为空命令</p>
+<p>ldr 这一行的意思是，将当前 pc 寄存器中的值，加上 0x15dc，再存到 x16 寄存器中</p>
+<p>br 这一行的意思是，跳转到 x16 寄存器的值指向的地址。</p>
+<p>x16 寄存器中的值会是什么？根据 ldr 这一行算出，是 0000000100006a7c + 0x15dc = 0x8058</p>
+<p>去查看 0x8058 这个地址，它位于 DATA 段 __la_symbol_ptr 节。</p>
+<figure data-type="image" tabindex="6"><img src="https://xushuangqing.github.io/post-images/Fishhook--yuan-li-qian-xi/164542-1eca7149fd138a23.png" alt="" loading="lazy"></figure>
+<p>__la_symbol_ptr 节是一系列指针，这些指针指向的，是某一个指令的地址。</p>
+<p>这里 0x8058 这个地址中存的是 0x100006b08</p>
+<p>这个 0x100006b08 是 MachO 还未 or 刚刚载入内存中时，内存中 0x100008058 地址存的值。但是内存中的值是可以被改变的。事实上，只有第一次调用 printf 的时候，这一步会跳转到 0x100006b08，之后，这个内存会被写入新的地址，即动态库中 printf() 函数的地址。</p>
+<p>这就是 Lazy bind。</p>
+<h4 id="lazy-bind">Lazy bind</h4>
+<p>Fishhook 的 README 中介绍：</p>
+<blockquote>
+<p>__la_symbol_ptr is an array of pointers to imported functions that is generally filled by a routine called dyld_stub_binder during the first call to that symbol</p>
+</blockquote>
+<p>也就是说，这个 __la_symbol_ptr 节中的内容，在载入内存后，是一个函数指针的数组。</p>
+<p>我们就来看看这个 0x8058 中存储的 0x100006b08，是一个什么样的函数指针。</p>
+<p>0x100006b08 位于 __TEXT 段 __stub_helper 节，它的汇编指令是：</p>
+<figure data-type="image" tabindex="7"><img src="https://xushuangqing.github.io/post-images/Fishhook--yuan-li-qian-xi/164542-bfff6d6b30e522d4.png" alt="" loading="lazy"></figure>
+<pre><code>0000000100006b08        ldr        w16, 0x100006b10
+0000000100006b0c        b        0x100006a84
+</code></pre>
+<p>接下来就会跳转到 0x6a84 这个地址。</p>
+<p>这个地址是 __stub_helper 节的开头。</p>
+<figure data-type="image" tabindex="8"><img src="https://xushuangqing.github.io/post-images/Fishhook--yuan-li-qian-xi/164542-a679436d88d03c6c.png" alt="" loading="lazy"></figure>
+<p>执行几个指令后，就回去调用 dyld_stub_binder 函数</p>
+<p>dyld_stub_binder 是 dyld 执行 bind 的函数。这个函数执行完后，__la_symbol_ptr 节中的内容，将不再是指向 __stub_helper 节的地址，而是 printf 函数真正的地址。</p>
+<p>那么下次调用 printf 函数的时候，就可以直接通过 __la_symbol_ptr，找到真正的 printf 函数地址了。</p>
+<h2 id="四-fishhook-做了什么">四、Fishhook 做了什么</h2>
+<p>这时，我们想，如果把 __la_symbol_ptr 中存的地址改了，那是不是就能把 printf 函数指向其它一段指令了呢？</p>
+<p>Fishhook 也是这样想的。</p>
+<p>所以 Fishhook 的原理，也是篡改内存中 __la_symbol_ptr 中的内容。把原本应该存 printf() 地址的那块内存，内容改为 my_printf() 地址。</p>
+<p>那么问题来了，我们能用函数指针的方式，知道 my_printf() 的地址，但是我们怎么知道，__la_symbol_ptr 中的第几个元素，表示的是 printf() 的地址呢？</p>
+<p>如果我们能知道 __la_symbol_ptr 中的第 n 个元素，表示的函数的名字，那我们可以遍历 __la_symbol_ptr 数组，找到表示 printf() 的那个。</p>
+<p>于是现在问题变成了，我们怎么知道 __la_symbol_ptr 中的每个元素表示的函数的名字呢？</p>
+<p>这里就有一个规律：</p>
+<figure data-type="image" tabindex="9"><img src="https://xushuangqing.github.io/post-images/Fishhook--yuan-li-qian-xi/164542-35cb26020f2205c7.png" alt="" loading="lazy"></figure>
+<p>我们再用 printf() 来走一遍这个流程，验证一番。</p>
+<h3 id="41-找到对应函数名">4.1 找到对应函数名</h3>
+<h4 id="__la_symbol_ptr-indirect-symbols">__la_symbol_ptr --&gt;  Indirect Symbols</h4>
+<p>MachO 文件有个规律，__la_symbol_ptr 节中的第 i 个数据，在 Indirect Symbols 中有对应的体现，且 index 变成了 reserved0 + i。</p>
+<p>printf() 对应的数据，在 __la_symbol_ptr 节中是第 10 个元素，__la_symbol_ptr 中的 reserved1 为 12，那么我们找到 Indirect Symbols 中的第 22 个元素：</p>
+<figure data-type="image" tabindex="10"><img src="https://xushuangqing.github.io/post-images/Fishhook--yuan-li-qian-xi/164542-f4cf0cb42326d95b.png" alt="" loading="lazy"></figure>
+<figure data-type="image" tabindex="11"><img src="https://xushuangqing.github.io/post-images/Fishhook--yuan-li-qian-xi/164542-b536c8aa302822a7.png" alt="" loading="lazy"></figure>
+<p>这里的值是 0x50</p>
+<h4 id="indirect-symbols-symbol-table">Indirect Symbols --&gt; Symbol Table</h4>
+<p>我们拿着 0x50，去 Symbol Table 中找到 Symbol Table 中 index = 0x50 的数据。</p>
+<figure data-type="image" tabindex="12"><img src="https://xushuangqing.github.io/post-images/Fishhook--yuan-li-qian-xi/164542-3c353870cd6b86f5.png" alt="" loading="lazy"></figure>
+<p>得到 0x233</p>
+<h4 id="symbol-table-string-table">Symbol Table --&gt; String Table</h4>
+<p>Symbol Table 中偏移量为 0x233 的字符串，就是 _printf</p>
+<figure data-type="image" tabindex="13"><img src="https://xushuangqing.github.io/post-images/Fishhook--yuan-li-qian-xi/164542-a84d10416069c30a.png" alt="" loading="lazy"></figure>
+<p>这样，主 binary 就知道，__la_symbol_ptr 节中的第 10 个元素，代表 printf，</p>
+<h3 id="42-篡改-__la_symbol_ptr-中的数据">4.2 篡改 __la_symbol_ptr 中的数据</h3>
+<p>这样，fishhook 只要遍历一次 __la_symbol_ptr，当发现第 i 个元素对应的名字，就是我们要 hook 的名字时，就可以将 __la_symbol_ptr 中的第 i 个元素的值篡改掉，完成 hook 的过程。</p>
+<h2 id="参考资料">参考资料</h2>
+<p>Fishhook 源码：<a href="https://github.com/facebook/fishhook">https://github.com/facebook/fishhook</a></p>
+<p>iOS逆向(6)-从fishhook看runtime，hook系统C函数 <a href="https://www.jianshu.com/p/b6a72aa6c146">https://www.jianshu.com/p/b6a72aa6c146</a></p>
+<p>Dyld之二: 动态链接过程：<a href="https://blog.cnbluebox.com/blog/2017/10/12/dyld2/">https://blog.cnbluebox.com/blog/2017/10/12/dyld2/</a></p>
+<p><a href="https://developer.apple.com/videos/play/wwdc2017/413/">App Startup Time: Past, Present, and Future</a></p>
+<p><a href="https://developer.apple.com/videos/play/wwdc2016/406/?time=1154">Optimizing App Startup Time</a></p>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/FBRetainCycleDetector-yu-dao-NSMapTable-de-crash----cong-fa-xian-dao-PR/">
+              <h3 class="post-title">
+                下一篇：FBRetainCycleDetector遇到NSMapTable的crash---从发现到PR
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

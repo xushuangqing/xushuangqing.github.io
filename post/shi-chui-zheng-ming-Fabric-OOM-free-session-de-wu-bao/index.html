@@ -1,0 +1,151 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>实锤证明Fabric OOM free session的误报 | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909522993">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909522993" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">实锤证明Fabric OOM free session的误报</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2019-06-18</span>
+            
+          </div>
+          <div class="post-content">
+            <p>Fabric 是业界著名的 crash 监控平台，国内外均有不少 app 使用 Fabric 进行 crash 和其他稳定性数据的监控。其中，OOM 率数据也是深受大家关注的数据之一。</p>
+<p>但现在，我们通过各 app 间 OOM 率对比、猜测和验证，实锤证明了 Fabric 的 OOM 率有重大误报问题。其中最主要的误报是：Fabric 将用户正常的后台启动误判为了 OOM，导致各 app 的 OOM 率均是大幅偏高的。</p>
+<h2 id="oom-率对比">OOM 率对比</h2>
+<p>Fabric 检测 OOM 的原理，参考自 Facebook 的一篇文章：https://code.fb.com/ios/reducing-fooms-in-the-facebook-ios-app/</p>
+<p>它在 app 每次启动时，判断了 app 上次进程结束的原因，排除掉 首次安装、app升级、系统升级、crash等原因，最后筛选出前台 OOM 的用户。</p>
+<p>Fabric也在文档中特意强调，他们的 OOM-free-session 指标，使用的是前台 OOM 率。也就是说，被 Fabric 捕获到的 OOM 用户，其用户体验预期是与 crash 同样严重的。</p>
+<pre><code> We only report the OOM if the app was in the foreground before the second launch. 
+</code></pre>
+<p>但我们经手的多个产品，在 Fabric 平台上体现的 OOM 率，都比直观感受高很多，在百分之的量级。并且多个产品之间的 OOM 率有明显差距。如果线上用户的实际体验真是如此，那么 OOM 问题的确是非常严重、亟待解决的问题。</p>
+<h2 id="猜测">猜测</h2>
+<p>为了定位 OOM 问题，我们曾根据 Facebook 描述的原理，自研过 OOM 监控功能。我们期望通过追查单个用户 OOM 前的操作行为去定位 OOM 发生场景的共性。但当时，我们惊奇地发现，很多用户的行为是：启动 - 再次启动。看起来是用户在启动阶段，就遭遇了 OOM 问题。</p>
+<p>这样的用户行为给我们带来了很大困扰。直到我们发现，自研的 OOM 监控中，默认将 app 启动后的状态置为了 foreground 状态。从代码上推测，当用户因 background fetch 等机制触发后台启动时，就有可能被自研 OOM 监控模块判定为 OOM。</p>
+<p>对此，我们快速进行了验证，发现，后台启动的确会被自研 OOM 监控判定为前台 OOM。修复这一问题后，我们也对比发现，Fabric 的 OOM 率和 自研组件监控到的OOM率，相差甚远。</p>
+<p>于是我们怀疑，Fabric 是不是和我们一开始犯了同样的错误，默认 app 启动后即进入前台，从而将后台启动误判为 OOM 呢？</p>
+<h2 id="验证">验证</h2>
+<p>我们对于以上猜测进行了验证。</p>
+<p>由于 Fabric 的 OOM 数据，只有 “版本的 OOM-free-session” 这一项，没有提供更详细的信息，也无法单点追查，我们只能通过打一个特殊版本号的包的方式实验。</p>
+<p>至于如何让 app 后台唤起，我们使用的是推送带选项通知的手段。用户在通知中心做这些操作，实际会让 app 在后台短暂唤起。<br>
+<img src="https://xushuangqing.github.io/post-images/shi-chui-zheng-ming-Fabric-OOM-free-session-de-wu-bao/164542-d8c9949f26d7d131.png" alt="" loading="lazy"></p>
+<p>用这个特殊版本号的包，操作了若干次后台唤起。两天后，我们果然在 Fabric 平台上看到了这个特殊版本号的包，被检测到了 5 次 OOM。但实际上，整个过程中，此包没有遇到任何一次真正的前台 OOM。<br>
+<img src="https://xushuangqing.github.io/post-images/shi-chui-zheng-ming-Fabric-OOM-free-session-de-wu-bao/164542-4525e82517e7006f.png" alt="" loading="lazy"></p>
+<p>据此，我们可以证明，Fabric 至少将用户正常的后台唤起，误报为了 OOM。这显然会造成严重的 OOM 率虚高问题。</p>
+<p>与我们有同样困扰的开发者也存在，在追查期间，我们也在 StackOverFlow 上找到了类似的讨论：https://stackoverflow.com/questions/48121843/suddenly-getting-many-fabric-out-of-memory-sessions-can-fabric-oom-reports-ever</p>
+<p>而除了将正常后台唤起误报为 OOM 之外，我们从原理和文档上还能判断出，Fabric 至少还将 exit 和 watchdog 误报成了 OOM。</p>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/yong-hu-zai--app-store--shang-kan-dao-de-bao-da-xiao-jiu-jing-shi-shen-me-？/">
+              <h3 class="post-title">
+                下一篇：用户在 app store 上看到的包大小究竟是什么？
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>
