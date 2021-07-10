@@ -1,0 +1,160 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    
+<meta charset="utf-8" >
+
+<title>iOS 14 -[UIInputResponderController prepareToMoveKeyboardForInputViewSet:animationStyle:] crash 解决 | 卖萌凉</title>
+<meta name="description" content="&lt;p&gt;iOS开发者&lt;/p&gt;
+&lt;p&gt;毕业于清华大学计算机系&lt;/p&gt;
+&lt;p&gt;目前供职于字节跳动&lt;/p&gt;
+&lt;p&gt;—&lt;/p&gt;
+&lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://xushuangqing.github.io/favicon.ico?v=1625909921962">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+<link rel="stylesheet" href="https://xushuangqing.github.io/styles/main.css">
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+  </head>
+  <body>
+    <div id="app" class="main">
+      <div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://xushuangqing.github.io">
+        <img class="avatar" src="https://xushuangqing.github.io/images/avatar.png?v=1625909921962" alt="" width="32px" height="32px">
+      </a>
+      <a href="https://xushuangqing.github.io">
+        <h1 class="site-title">卖萌凉</h1>
+      </a>
+    </div>
+    <div class="right">
+      <transition name="fade">
+        <i class="icon" :class="{ 'icon-close-outline': menuVisible, 'icon-menu-outline': !menuVisible }" @click="menuVisible = !menuVisible"></i>
+      </transition>
+    </div>
+  </div>
+</div>
+
+<transition name="fade">
+  <div class="menu-container" style="display: none;" v-show="menuVisible">
+    <div class="menu-list">
+      
+    </div>
+  </div>
+</transition>
+
+
+      <div class="content-container">
+        <div class="post-detail">
+          
+          <h2 class="post-title">iOS 14 -[UIInputResponderController prepareToMoveKeyboardForInputViewSet:animationStyle:] crash 解决</h2>
+          <div class="post-info post-detail-info">
+            <span><i class="icon-calendar-outline"></i> 2020-07-12</span>
+            
+          </div>
+          <div class="post-content">
+            <h1 id="问题">问题</h1>
+<p>7 月 8 日 iOS 14 beta 2 放出后，我们注意到一个 crash 激增了起来。</p>
+<p>这个 crash 顶部的堆栈为：</p>
+<pre><code>0        _objc_retain (in libobjc.A.dylib)
+1        -[UIInputResponderController prepareToMoveKeyboardForInputViewSet:animationStyle:] (in UIKitCore)
+2        -[UIInputResponderController setKeyWindowSceneInputViews:animationStyle:] (in UIKitCore)
+3        -[UIInputResponderController setInputViews:animationStyle:] (in UIKitCore)
+4        -[UIInputResponderController setInputViews:animated:] (in UIKitCore)
+5        -[UIInputResponderController setInputViews:] (in UIKitCore)
+......
+</code></pre>
+<p>并且我们注意到，这个问题的触发，和业务形态没有特别密切的联系，多个 app 都遇到了这个崩溃，且量级不低。</p>
+<h1 id="修复方案">修复方案</h1>
+<p>先抛出一下我们最后确定的修复方案：</p>
+<p>hook 私有方法 <code>-[UIInputViewSet restorableResponder]</code>，直接返回 <code>nil</code>。</p>
+<p>由于是系统库自身的问题，我们没有源码，很难保证这个修复没有引入新的坑。但从目前的测试结果来看，至少崩溃不再复现了，并且看起来有关联的键盘场景，也没有严重问题。</p>
+<h1 id="原因定位">原因定位</h1>
+<p>造成 crash 的原因，是系统私有类 <code>UIInputViewSet</code> 中的 <code>restorableResponder</code> 属性，既不是 weak 也不是 strong，类似于 unsafe_unretained。所以当它被访问时，很容易造成野指针。当它被赋值给一个 <code>__strong id</code> 类型的变量时，则会在 <code>_objc_retain</code> 中崩溃。</p>
+<p>我们可以打符号断点，从汇编中确认， iOS 14 beta 2 中，restorableResponder 属性的 getter 和 setter 方法，只是存取了一个内存值，没有做任何 weak 或 strong 应有的操作。</p>
+<p><img src="https://xushuangqing.github.io/post-images/iOS-14---%5BUIInputResponderController-prepareToMoveKeyboardForInputView/164542-fccf065a692031aa.png" alt="" loading="lazy"><br>
+<img src="https://xushuangqing.github.io/post-images/iOS-14---%5BUIInputResponderController-prepareToMoveKeyboardForInputView/164542-e8ce966189f633a9.png" alt="" loading="lazy"><br>
+（从汇编指令看，没有 storeWeak 或 storeStrong 操作）</p>
+<p>可以 hook  <code>-[UIInputViewSet restorableResponder]</code> 方法，验证一下它的返回值是不是经常是个野指针。</p>
+<h1 id="定位过程">定位过程</h1>
+<p>是怎么定位到 <code>-[UIInputViewSet restorableResponder]</code> 方法的呢？我的思路是这样的：</p>
+<p>1、猜测问题来源于最顶栈  <code>-[UIInputResponderController prepareToMoveKeyboardForInputViewSet:animationStyle:] (in UIKitCore)</code> 的参数</p>
+<p>2、hook <code>-[UIInputResponderController prepareToMoveKeyboardForInputViewSet:animationStyle:]</code> 方法，获取传入的参数，发现有两个参数，第一个参数类型是 UIInputViewSet，这两个参数本身不是野指针。</p>
+<p>3、hook <code>-[UIInputResponderController prepareToMoveKeyboardForInputViewSet:animationStyle:]</code>，尝试将传入的两个参数改成 nil，发现 crash 不复现了。这基本可以确认问题出在参数上。但参数本身不是野指针，所以推测问题出现在参数某个方法的返回值上。</p>
+<p>4、根据一份旧的 <a href="https://developer.limneos.net/?ios=11.0&amp;framework=UIKit.framework&amp;header=UIInputViewSet.h">UIInputViewSet 头文件</a>，在 lldb 中依次对这个 UIInputViewSet 对象发送消息。发现其中有个属性 restorableResponder，在旧版本上标记为 weak，但 getter 方法 return 出来的地址不是一个对象。严重怀疑这是一个野指针。</p>
+<p>5、hook <code>-[UIInputViewSet restorableResponder]</code>，返回 nil，crash 不复现，确认问题出在 <code>-[UIInputViewSet restorableResponder]</code> 方法上</p>
+<p>6、通过汇编确认 <code>restorableResponder</code> 在 iOS 14 beta 2 上既不是 strong 也不是 weak</p>
+<p>相信很多团队都遇到了这个 crash，先前在网络上搜索未果，暂且抛出我的解决方案，欢迎与大家交流。<br>
+当然最终还是等苹果爸爸真正修复它 😭</p>
+
+          </div>
+        </div>
+
+        
+          <div class="next-post">
+            <a class="purple-link" href="https://xushuangqing.github.io/post/cong--Exported-Symbols--ying-yong-yu-bao-da-xiao-you-hua-shuo-dao-fu-hao-bang-ding/">
+              <h3 class="post-title">
+                下一篇：从 Exported Symbols 应用于包大小优化说到符号绑定
+              </h3>
+            </a>
+          </div>
+          
+      </div>
+
+      
+
+      <div class="site-footer">
+  <div class="slogan"><p>iOS开发者</p>
+<p>毕业于清华大学计算机系</p>
+<p>目前供职于字节跳动</p>
+<p>—</p>
+<p>如果你想了解我的生活，欢迎关注我的微信公众号：散步日历</p></div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+   | <a class="rss" href="https://xushuangqing.github.io/atom.xml" target="_blank">RSS</a>
+</div>
+
+
+    </div>
+    <script type="application/javascript">
+
+hljs.initHighlightingOnLoad()
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+  </body>
+</html>

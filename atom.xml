@@ -2,7 +2,7 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://xushuangqing.github.io</id>
     <title>卖萌凉</title>
-    <updated>2021-07-10T09:34:07.827Z</updated>
+    <updated>2021-07-10T09:39:04.739Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://xushuangqing.github.io"/>
     <link rel="self" href="https://xushuangqing.github.io/atom.xml"/>
@@ -390,6 +390,47 @@ __DATA_CONST                1f30167b0-1f301ae70    [   18K    18K     6K     0K]
 <p>可以发现，iOS 14.5 中，libxpc.dylib 的 <code>__DATA_CONST</code> 段是只读的，而 iOS 14.4 中是读写的。<br>
 同时观察其他系统库，能发现 iOS 14.5 中，不少系统库的 <code>__DATA_CONST</code> 段都从 iOS 14.4 的读写变成了只读，同时撞上了一直以来都有的 <code>mprotect</code> 失效的问题，所以产生了 crash。</p>
 <p>@maniackk 在 github 上的 PR <a href="https://github.com/facebook/fishhook/pull/84">If hooking in __DATA_CONST/__AUTH_CONST, promise writable before trying to write #84</a> 中对上文所说的两个问题做了解决。</p>
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[iOS 14 -[UIInputResponderController prepareToMoveKeyboardForInputViewSet:animationStyle:] crash 解决]]></title>
+        <id>https://xushuangqing.github.io/post/iOS-14---[UIInputResponderController-prepareToMoveKeyboardForInputView/</id>
+        <link href="https://xushuangqing.github.io/post/iOS-14---[UIInputResponderController-prepareToMoveKeyboardForInputView/">
+        </link>
+        <updated>2020-07-12T12:47:01.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="问题">问题</h1>
+<p>7 月 8 日 iOS 14 beta 2 放出后，我们注意到一个 crash 激增了起来。</p>
+<p>这个 crash 顶部的堆栈为：</p>
+<pre><code>0        _objc_retain (in libobjc.A.dylib)
+1        -[UIInputResponderController prepareToMoveKeyboardForInputViewSet:animationStyle:] (in UIKitCore)
+2        -[UIInputResponderController setKeyWindowSceneInputViews:animationStyle:] (in UIKitCore)
+3        -[UIInputResponderController setInputViews:animationStyle:] (in UIKitCore)
+4        -[UIInputResponderController setInputViews:animated:] (in UIKitCore)
+5        -[UIInputResponderController setInputViews:] (in UIKitCore)
+......
+</code></pre>
+<p>并且我们注意到，这个问题的触发，和业务形态没有特别密切的联系，多个 app 都遇到了这个崩溃，且量级不低。</p>
+<h1 id="修复方案">修复方案</h1>
+<p>先抛出一下我们最后确定的修复方案：</p>
+<p>hook 私有方法 <code>-[UIInputViewSet restorableResponder]</code>，直接返回 <code>nil</code>。</p>
+<p>由于是系统库自身的问题，我们没有源码，很难保证这个修复没有引入新的坑。但从目前的测试结果来看，至少崩溃不再复现了，并且看起来有关联的键盘场景，也没有严重问题。</p>
+<h1 id="原因定位">原因定位</h1>
+<p>造成 crash 的原因，是系统私有类 <code>UIInputViewSet</code> 中的 <code>restorableResponder</code> 属性，既不是 weak 也不是 strong，类似于 unsafe_unretained。所以当它被访问时，很容易造成野指针。当它被赋值给一个 <code>__strong id</code> 类型的变量时，则会在 <code>_objc_retain</code> 中崩溃。</p>
+<p>我们可以打符号断点，从汇编中确认， iOS 14 beta 2 中，restorableResponder 属性的 getter 和 setter 方法，只是存取了一个内存值，没有做任何 weak 或 strong 应有的操作。</p>
+<p><img src="https://xushuangqing.github.io/post-images/iOS-14---%5BUIInputResponderController-prepareToMoveKeyboardForInputView/164542-fccf065a692031aa.png" alt="" loading="lazy"><br>
+<img src="https://xushuangqing.github.io/post-images/iOS-14---%5BUIInputResponderController-prepareToMoveKeyboardForInputView/164542-e8ce966189f633a9.png" alt="" loading="lazy"><br>
+（从汇编指令看，没有 storeWeak 或 storeStrong 操作）</p>
+<p>可以 hook  <code>-[UIInputViewSet restorableResponder]</code> 方法，验证一下它的返回值是不是经常是个野指针。</p>
+<h1 id="定位过程">定位过程</h1>
+<p>是怎么定位到 <code>-[UIInputViewSet restorableResponder]</code> 方法的呢？我的思路是这样的：</p>
+<p>1、猜测问题来源于最顶栈  <code>-[UIInputResponderController prepareToMoveKeyboardForInputViewSet:animationStyle:] (in UIKitCore)</code> 的参数</p>
+<p>2、hook <code>-[UIInputResponderController prepareToMoveKeyboardForInputViewSet:animationStyle:]</code> 方法，获取传入的参数，发现有两个参数，第一个参数类型是 UIInputViewSet，这两个参数本身不是野指针。</p>
+<p>3、hook <code>-[UIInputResponderController prepareToMoveKeyboardForInputViewSet:animationStyle:]</code>，尝试将传入的两个参数改成 nil，发现 crash 不复现了。这基本可以确认问题出在参数上。但参数本身不是野指针，所以推测问题出现在参数某个方法的返回值上。</p>
+<p>4、根据一份旧的 <a href="https://developer.limneos.net/?ios=11.0&amp;framework=UIKit.framework&amp;header=UIInputViewSet.h">UIInputViewSet 头文件</a>，在 lldb 中依次对这个 UIInputViewSet 对象发送消息。发现其中有个属性 restorableResponder，在旧版本上标记为 weak，但 getter 方法 return 出来的地址不是一个对象。严重怀疑这是一个野指针。</p>
+<p>5、hook <code>-[UIInputViewSet restorableResponder]</code>，返回 nil，crash 不复现，确认问题出在 <code>-[UIInputViewSet restorableResponder]</code> 方法上</p>
+<p>6、通过汇编确认 <code>restorableResponder</code> 在 iOS 14 beta 2 上既不是 strong 也不是 weak</p>
+<p>相信很多团队都遇到了这个 crash，先前在网络上搜索未果，暂且抛出我的解决方案，欢迎与大家交流。<br>
+当然最终还是等苹果爸爸真正修复它 😭</p>
 ]]></content>
     </entry>
     <entry>
@@ -1152,108 +1193,6 @@ for (id obj in threadSafeArray) {
 <li>将YYThreadSafeArray种的锁暴露出去，让业务方在for-in循环时自行加锁。</li>
 </ol>
 <p>但这两种方法都依赖于调用方以一个特定的姿势来调用。如果调用姿势无法保证，YYThreadSafeArray也无法保证线程安全了。</p>
-]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[如何符号化Objective C调用栈]]></title>
-        <id>https://xushuangqing.github.io/post/ru-he-fu-hao-hua-Objective-C-diao-yong-zhan/</id>
-        <link href="https://xushuangqing.github.io/post/ru-he-fu-hao-hua-Objective-C-diao-yong-zhan/">
-        </link>
-        <updated>2017-09-01T13:10:32.000Z</updated>
-        <content type="html"><![CDATA[<p>本文讲述的是符号化“残破”的栈，如果你有一个系统生成的crash日志，请交给Xcode自带的symbolicatecrash脚本。</p>
-<p>Symbolicatecrash脚本的核心也是通过atos功能逐行符号化，但人家封装好了，比自己手动一行一行做快很多。</p>
-<p>示例栈：</p>
-<pre><code> 	0   XSQSymbolicateDemo                  0x00000001000ba530 XSQSymbolicateDemo + 25904
-	1   XSQSymbolicateDemo                  0x00000001000ba4f0 XSQSymbolicateDemo + 25840
-	2   XSQSymbolicateDemo                  0x00000001000ba4bc XSQSymbolicateDemo + 25788
-	3   XSQSymbolicateDemo                  0x00000001000ba478 XSQSymbolicateDemo + 25720
-	4   UIKit                               0x00000001966870ec &lt;redacted&gt; + 96
-	5   UIKit                               0x000000019668706c &lt;redacted&gt; + 80
-	6   UIKit                               0x00000001966715e0 &lt;redacted&gt; + 440
-	7   UIKit                               0x0000000196686950 &lt;redacted&gt; + 576
-	8   UIKit                               0x000000019668646c &lt;redacted&gt; + 2480
-	9   UIKit                               0x0000000196681804 &lt;redacted&gt; + 3192
-	10  UIKit                               0x0000000196652418 &lt;redacted&gt; + 340
-	11  UIKit                               0x0000000196e4bf64 &lt;redacted&gt; + 2400
-</code></pre>
-<p>这是我写的一个demo app，并且在编译后期滤去了符号表，所以仅能看到一些奇怪的地址。</p>
-<h5 id="如何符号化第三方app内的符号">如何符号化第三方app内的符号</h5>
-<p>以第一行：</p>
-<pre><code>0   XSQSymbolicateDemo                  0x00000001000ba530 XSQSymbolicateDemo + 25904
-</code></pre>
-<p>为例</p>
-<p>需要条件：</p>
-<p>（1）atos工具（Xcode安装时一般会自带）</p>
-<p>（2）确认app运行的架构（armv7、arm64）</p>
-<p>（3）app对应的dSYM文件（出包时获得）</p>
-<p>（4）app代码载入到内存的基地址（后文详细介绍）</p>
-<p>方法：</p>
-<p>在命令行中输入：</p>
-<pre><code>xcrun atos -arch arm64 -o ./XSQSymbolicateDemo.app.dSYM/Contents/Resources/DWARF/XSQSymbolicateDemo  -l  0x1000b4000 0x00000001000ba530
-</code></pre>
-<figure data-type="image" tabindex="1"><img src="https://xushuangqing.github.io/post-images/ru-he-fu-hao-hua-Objective-C-diao-yong-zhan/164542-92eaf007c808880a.png" alt="" loading="lazy"></figure>
-<p>即可得到符号化后的结果：</p>
-<pre><code>-[ViewController helloWorld2] (in XSQSymbolicateDemo) (ViewController.m:100)
-</code></pre>
-<h5 id="如何符号化系统动态库中的符号">如何符号化系统动态库中的符号</h5>
-<p>以这一行为例：</p>
-<pre><code>4   UIKit                               0x00000001966870ec &lt;redacted&gt; + 96
-</code></pre>
-<p>需要条件：</p>
-<p>（1）atos工具（Xcode安装时一般会自带）</p>
-<p>（2）确认app运行的架构（armv7、arm64）</p>
-<p>（2）该OS版本、该动态库的符号文件（将该手机连接到电脑的Xcode上，会自动同步系统符号文件）</p>
-<p>（3）该动态库载入到内存的基地址（后文详细介绍）</p>
-<p>方法：</p>
-<p>在命令行中输入：</p>
-<pre><code>xcrun atos -arch arm64 -o ~/Library/Developer/Xcode/iOS\ DeviceSupport/10.3.1\ \(14E304\)/Symbols/System/Library/Frameworks/UIKit.framework/UIKit -l  0x196642000 0x00000001966870ec
--[UIApplication sendAction:to:from:forEvent:] (in UIKit) + 96
-</code></pre>
-<figure data-type="image" tabindex="2"><img src="https://xushuangqing.github.io/post-images/ru-he-fu-hao-hua-Objective-C-diao-yong-zhan/164542-312c39652df804e8.png" alt="" loading="lazy"></figure>
-<p>即可得到符号化后的结果：</p>
-<pre><code>-[UIApplication sendAction:to:from:forEvent:] (in UIKit) + 96
-</code></pre>
-<h5 id="如何获取基地址">如何获取基地址</h5>
-<p>注意：基地址在进程每次启动时决定，所以重启进程后，符号化时必须使用<strong>当次启动</strong>的基地址</p>
-<p><strong>方案一：从iOS生成的crash日志中获取</strong></p>
-<p>在iOS系统生成的crash日志中的下半部分，有这样的一些信息：</p>
-<figure data-type="image" tabindex="3"><img src="https://xushuangqing.github.io/post-images/ru-he-fu-hao-hua-Objective-C-diao-yong-zhan/164542-6ff2da0526ef83e6.png" alt="" loading="lazy"></figure>
-<p>蓝色框圈出来的部分，即为app代码载入到内存的基地址</p>
-<p>红色框圈出来的部分，即为各个动态库载入到内存的基地址</p>
-<p><strong>方案二：在app运行时打印</strong></p>
-<p>可以在app中调用如下代码获取各个image的基地址：</p>
-<pre><code>void printAllImage()
-{
-    for (int i = 0; i &lt; _dyld_image_count(); i++) {
-        char *image_name = (char *)_dyld_get_image_name(i);
-        const struct mach_header *mh = _dyld_get_image_header(i);
-        intptr_t vmaddr_slide = _dyld_get_image_vmaddr_slide(i);
-        
-        NSLog(@&quot;Image name %s at address 0x%llx and ASLR slide 0x%lx.\n&quot;,
-               image_name, (mach_vm_address_t)mh, vmaddr_slide);
-    }
-}
-</code></pre>
-<p>得到如下输出：</p>
-<pre><code>Image name /var/containers/Bundle/Application/351121C8-CFE4-49AD-ACC0-A70C5BF1C4A6/XSQSymbolicateDemo.app/XSQSymbolicateDemo at address 0x1000b4000 and ASLR slide 0xb4000.
- Image name /System/Library/Frameworks/Foundation.framework/Foundation at address 0x190f0c000 and ASLR slide 0xeedc000.
- Image name /usr/lib/libarchive.2.dylib at address 0x190ee0000 and ASLR slide 0xeedc000.
- Image name /usr/lib/libbz2.1.0.dylib at address 0x190e9e000 and ASLR slide 0xeedc000.
- Image name /usr/lib/libSystem.B.dylib at address 0x18ef04000 and ASLR slide 0xeedc000.
- Image name /usr/lib/system/libcache.dylib at address 0x18f35a000 and ASLR slide 0xeedc000.
-......
-</code></pre>
-<p>可以看到第一行代表的是app自身，之后的每一行是app载入的动态库们。</p>
-<h5 id="介绍加载和aslr">介绍加载和ASLR</h5>
-<p>大致理解：</p>
-<p>在进程启动的时候，内核加载器或者dyld会将指令加载到内存中。</p>
-<p>ASLR全名Address Space Layout Randomization，地址空间布局随机化，用于防范恶意程序对已知地址进行攻击</p>
-<p>在ASLR引入之前，由于加载的规则是固定的，所以理论上，一个进程不管重启多少次，每条指令对应的内存中的地址都是一样的。而每条指令对应到内存中的哪个地址，可以通过分析Mach-O文件分析出来。这就容易产生安全漏洞。</p>
-<p>ASLR引入后，在进程启动前期的加载阶段，会生成一个随机数offset，让加载形成的内存整体偏移一个offset。</p>
-<p>这样一个进程多次启动，每次行程的内存空间布局都不完全一致。同一个指令，经过多次启动，每次都会被布局到一个新计算出来的地址。</p>
-<p>所以仅仅凭借“一个指令在内存中的地址”和dSYM文件，是无法进行符号化的，因为这个“地址”同时依赖于ASLR生成的offset。</p>
-<p>我理解其实只需要一个offset，配合已知的架构、加载方式等信息，应该就能推测出app自身的基地址和各个库的基地址。尝试后也证明，各个库的基地址-offset后的值在同个设备的多次启动上是一致的。<br>
-但是为了图省事，还是自己打印一下所有库的基地址吧(´･ω･`)</p>
 ]]></content>
     </entry>
 </feed>
