@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+    <id>https://https://xushuangqing.github.io/</id>
+    <title>卖萌凉</title>
+    <updated>2021-07-10T05:37:34.107Z</updated>
+    <generator>https://github.com/jpmonette/feed</generator>
+    <link rel="alternate" href="https://https://xushuangqing.github.io/"/>
+    <link rel="self" href="https://https://xushuangqing.github.io/atom.xml"/>
+    <logo>https://https://xushuangqing.github.io/images/avatar.png</logo>
+    <icon>https://https://xushuangqing.github.io/favicon.ico</icon>
+    <rights>All rights reserved 2021, 卖萌凉</rights>
+    <entry>
+        <title type="html"><![CDATA[UIScrollView滚动动画]]></title>
+        <id>https://https://xushuangqing.github.io/post/uiscrollview-gun-dong-dong-hua/</id>
+        <link href="https://https://xushuangqing.github.io/post/uiscrollview-gun-dong-dong-hua/">
+        </link>
+        <updated>2015-07-10T03:58:42.000Z</updated>
+        <content type="html"><![CDATA[<!-- more -->
+<p>如果要用代码实现UIScrollView的滚动，我的第一反应就是写一行类似这样的代码：</p>
+<pre><code>[scrollView setContentOffset:CGPointMake(0, 100) animated:YES];
+</code></pre>
+<p>苹果提供了这样一个接口，表明它希望第三方程序员使用这个接口来完成UIScrollView的滚动操作。但是我一直在想，它和用UIView的property animation，来直接改变contentOffset有什么不同呢？我为什么不这样写呢：</p>
+<pre><code>[UIView animateWithDuration:0.25
+                 animations:^{
+                     [scrollView setContentOffset:CGPointMake(0, 100)];
+                 }];
+</code></pre>
+<p>写代码实验了一下，发现这是两种完全不同的滚动方式。</p>
+<p><strong>(1) 使用animated参数，可以获得正确的UIScrollViewDelegate的回调；而使用UIView动画则不能。</strong></p>
+<p>在<a href="https://developer.apple.com/library/ios/documentation/WindowsViews/Conceptual/UIScrollView_pg/ScrollingViewContent/ScrollingViewContent.html">苹果的官方文档</a>中，对<code>setContentOffset:animated:</code>这一方法会引起的回调有大概如下的解释：</p>
+<blockquote>
+<p>如果animated这一参数设置为NO，或者直接设置contentOffset这个property，delegate会收到一个<code>scrollViewDidScroll:</code>消息。如果animated这一参数设置为YES，则在整个动画过程中，delegate会收到一系列的<code>scrollViewDidScroll:</code>消息，并且当动画完成时，还会收到一个<code>scrollViewDidEndScrollingAnimation:</code>消息。</p>
+</blockquote>
+<p>实验证明，使用<code>setContentOffset:animated:</code>方法得到的回调行为和官方文档中描述的一致。而使用UIView动画，则只能收到一次<code>scrollViewDidScroll:</code>回调，不能收到<code>scrollViewDidEndScrollingAnimation:</code>回调。</p>
+<p><strong>(2) 使用animated参数，可以获取到动画过程中contentOffset的值。</strong></p>
+<p>如果在动画开始之前，contentOffset均为(0, 0)，分别执行接下来的两段代码：</p>
+<pre><code>[UIView animateWithDuration:0.25
+                 animations:^{
+                     [scrollView setContentOffset:CGPointMake(0, 100)];
+                 }];
+NSLog(@&quot;%f&quot;, scrollView.contentOffset.y);//输出：100.000000
+</code></pre>
+<pre><code>[scrollView setContentOffset:CGPointMake(0, 100) animated:YES];
+NSLog(@&quot;%f&quot;, scrollView.contentOffset.y);//输出：0.000000
+dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.1 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+    NSLog(@&quot;%f&quot;, scrollView.contentOffset.y);//输出：25.500000，每次输出不保证一致
+});
+</code></pre>
+<p>可以看出，使用UIView动画后，无论在什么时候查询contentOffset的值，得到的都是动画的最终值。而使用animated参数，可以在动画过程中得到与当前状态较为一致的contentOffset值。</p>
+<p>参考<a href="http://www.objc.io/issue-3/scroll-view.html">这篇文章</a>，改变UIScrollView的contentOffset，实际上应该就是在改变UIScrollView的bounds。按照<a href="https://developer.apple.com/library/ios/documentation/UIKit/Reference/UIView_Class/index.html#//apple_ref/occ/instp/UIView/bounds">苹果官方文档</a>中的描述，bounds这个property是可以用作UIView动画的property。</p>
+<p>但是<code>setContentOffset:animated:</code>这一方法中实现的肯定不是UIView一个property animation那么简单。</p>
+<p>实际工作中，我也发现，在tableView中使用animated参数这种方法呈现的动画效果的流畅程度明显低于UIView动画。但是考虑到UIScrollView的回调和苹果的推荐，还是应该尽量使用<code>setContentOffset:animated:</code>这个接口来完成UIScrollView的滚动。</p>
+]]></content>
+    </entry>
+</feed>
