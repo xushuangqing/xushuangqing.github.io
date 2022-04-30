@@ -2,7 +2,7 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://xushuangqing.github.io</id>
     <title>卖萌凉</title>
-    <updated>2021-07-10T09:39:04.739Z</updated>
+    <updated>2022-04-30T07:03:01.529Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://xushuangqing.github.io"/>
     <link rel="self" href="https://xushuangqing.github.io/atom.xml"/>
@@ -13,7 +13,389 @@
 &lt;p&gt;如果你想了解我的生活，欢迎关注我的微信公众号：散步日历&lt;/p&gt;</subtitle>
     <logo>https://xushuangqing.github.io/images/avatar.png</logo>
     <icon>https://xushuangqing.github.io/favicon.ico</icon>
-    <rights>All rights reserved 2021, 卖萌凉</rights>
+    <rights>All rights reserved 2022, 卖萌凉</rights>
+    <entry>
+        <title type="html"><![CDATA[如何实现函数栈回退跳转 -- 结合 exception handling 流程的 libunwind 源码学习]]></title>
+        <id>https://xushuangqing.github.io/post/ru-he-shi-xian-zhan-hui-tui-tiao-zhuan/</id>
+        <link href="https://xushuangqing.github.io/post/ru-he-shi-xian-zhan-hui-tui-tiao-zhuan/">
+        </link>
+        <updated>2021-12-29T12:47:01.000Z</updated>
+        <content type="html"><![CDATA[<h2 id="引言">引言</h2>
+<p>开发者对语言层面的异常应该都不会陌生。在 iOS 平台，许多崩溃都源自 uncaught exception。Exception handling 的流程和细节较多，此文将结合 libunwind 源码重点描述其中的一个话题：如何实现函数栈回退。其原理既可以应用在 exception handling 流程，又可以给其他“黑科技”带来灵感。</p>
+<p>以这样的代码片段为例：</p>
+<pre><code>- (void)throwFunction2 {
+  @throw [NSException exceptionWithName:@&quot;Exception&quot; reason:@&quot;&quot; userInfo:nil];
+}
+
+- (void)throwFunction1 {
+  [self throwFunction2];
+}
+
+- (void)catchFunction {
+  @try {
+    [self throwFunction1];
+  } @catch (NSException *exception) {
+    NSLog(@&quot;catch&quot;);
+  } @finally {
+
+  }
+}
+
+</code></pre>
+<p>异常抛出以后，函数会从 throw 处跳转到 <code>@catch</code> 这段代码中。如何实现这个退栈跳转，就是此文要学习的部分。</p>
+<h2 id="背景知识">背景知识</h2>
+<h3 id="exception-handling-流程">Exception Handling 流程</h3>
+<p>关于 exception handling 的资料较多，此处我们划一下重点：当一个 exception 被抛出的时候，异常处理逻辑会进行两次调用栈遍历的操作：</p>
+<p>Search Phase：检查调用栈中是否有匹配的 catch handler</p>
+<p>Cleanup Phase：进行栈回退操作，期间可能会跳转到若干个 non-catch handler 做析构，最后跳转到 catch handler（文中的例子会直接跳转到 catch handler）</p>
+<p>这些操作都是在同一个线程，即抛出异常的线程中完成的。</p>
+<p>这里的栈回退操作，就需要改变当前的 PC 指针，从异常处理的函数中，最终跳转到 catch handler。这个跳转并不是一个简单的 branch 指令修改完 PC 就可以完成的，因为它跨越了函数，所以需要处理好上下文信息。如何处理好这些上下文信息，就是此文将学习的内容。</p>
+<h3 id="栈回退跳转需要解决哪些问题">栈回退跳转需要解决哪些问题？</h3>
+<p>“线程的本质是一组寄存器的状态。”因此，在跨函数跳转时，这“一组寄存器的状态”是需要重点处理的信息。这里我们补充一下 calling convention 的知识。由于 iOS 的大部分设备使用 arm64 架构，因此此处和下文都以 arm64 架构举例。</p>
+<figure data-type="image" tabindex="1"><img src="https://xushuangqing.github.io/post-images/ru-he-shi-xian-zhan-hui-tui-tiao-zhuan/1.png" alt="" loading="lazy"></figure>
+<p>根据 <a href="https://developer.arm.com/documentation/102374/0101/Procedure-Call-Standard">Procedure Call Standard</a>：</p>
+<ul>
+<li>
+<p>x0-x7 寄存器用于参数和返回值的传递</p>
+</li>
+<li>
+<p>x8 用于简介保存返回值，当返回较大结构体、x0-x7 无法承担的时候，返回值会被写入内存，x8 寄存器会保存返回值的地址</p>
+</li>
+<li>
+<p>x9-x15 是 caller saved registers，可以被 calle 修改，所以当 caller 希望保留这些寄存器的值时，需要在调用 callee 之前将它们存起来</p>
+</li>
+<li>
+<p>x16-x17 是 intra-procedure-call corruptible register，它可能在函数被调用后、执行第一行指令前被改变，常常被链接器用于在 caller 和 callee 之间插入代码片段</p>
+</li>
+<li>
+<p>x18 是平台保留寄存器</p>
+</li>
+<li>
+<p>x19-x28 是 callee-saved register，也就是说，当一个函数需要使用 x19-x23 时，需要先将它们原来的值保存起来，在函数返回前将 x19-x23 恢复到原来的值。</p>
+</li>
+<li>
+<p>x29 是 fp，frame pointer，帧指针寄存器</p>
+</li>
+<li>
+<p>x30 是 lr，linker register，链接寄存器，在进行函数调用时，lr 寄存器会更新为当前指令的下一条指令地址，也就是函数返回后需要继续执行的指令</p>
+</li>
+<li>
+<p>sp，stack pointer，指向函数分配栈空间的栈顶</p>
+</li>
+<li>
+<p>pc，program counter，存储 cpu 当前执行的指令地址</p>
+</li>
+<li>
+<p>d0-d7 浮点寄存器用于参数和返回值的传递</p>
+</li>
+<li>
+<p>d8-d15 浮点寄存器都是 callee-saved register，需要在函数返回前恢复</p>
+</li>
+<li>
+<p>d16-d31 浮点寄存器，在 <a href="https://developer.arm.com/documentation/102374/0101/Procedure-Call-Standard">arm64 文档</a>中写的是 callee-saved register，但是……有点存疑</p>
+</li>
+</ul>
+<p>因此，当发生退栈操作时，需要在运行时将这些寄存器的状态设置正确。更具体地说，需要解决两类问题：</p>
+<ol>
+<li>正确设置四个重要的寄存器 pc、lr、fp、sp</li>
+<li>如何恢复 x19 - x28、d8 - d15 这几个 callee saved register</li>
+</ol>
+<h2 id="libunwind-的做法">libunwind 的做法</h2>
+<p>根据 <em><a href="https://itanium-cxx-abi.github.io/cxx-abi/abi-eh.html">Itanium C++</a></em> <em><a href="https://itanium-cxx-abi.github.io/cxx-abi/abi-eh.html">ABI</a>**<a href="https://itanium-cxx-abi.github.io/cxx-abi/abi-eh.html">: Exception Handling</a></em>，异常处理的 ABI 分为两层，其中 Base ABI 是语言无关的，负责 stack unwinding，也就是栈回退操作，C++ ABI 则和 C++ 语言相关。libunwind 是 Base ABI 的实现。可以在 LLVM Project 中找到开源实现并做构建和调试。OC 的异常处理实际和 C++ 一样，从源码中可以发现，<a href="https://github.com/0xxd0/objc4/blob/b73f5d4700db192ffdc91b5ead36f3ddf8bfe174/objc4/runtime/objc-exception.mm#L591">objc_exception_throw</a> 函数只是对 C++ 异常处理函数（<code>__cxa_throw</code>）的封装。</p>
+<p>下面我们将结合 libunwind 的源码，讲解栈回退跳转时 libunwind 的处理方式。由于跳转只发生在 phase2 中，因此我们按照 phase 2 的调用顺序来理解。核心的代码都位于 <a href="https://github.com/apple/llvm-project/blob/7ca7a2547f00e34f5ec91be776a1d0bbca74b7a9/libunwind/src/UnwindLevel1.c#L132">unwind_phase2</a> 中。</p>
+<ol>
+<li>
+<h3 id="__unw_getcontext抛出异常时将寄存器状态备份到内存"><code>__unw_getcontext</code>：抛出异常时，将寄存器状态备份到内存</h3>
+</li>
+</ol>
+<p><code>__unw_getcontext</code> 函数是在 <code>_Unwind_RaiseException</code> 函数中被调用的。也就是异常处理的入口。当业务层 OC 代码执行到 <code>@throw</code> 时，会依次调用 <code>objc_exception_throw</code>、<code>__cxa_throw</code> 和 <code>_Unwind_RaiseException</code>。</p>
+<p><code>__unw_getcontext</code> 有一个参数，我们称它为 <code>&amp;context</code>。<code>__unw_getcontext</code> 的作用，是将当前的寄存器状态保存到 <code>context</code> 这块内存中。</p>
+<p>这个函数是汇编实现的，它做的事情，是将当前的 x0-x30，sp，d0-d31 寄存器存入内存中。其中，x30（即 lr） 寄存器被存了两次，第一次它作为 lr 寄存器被存入，第二次则是代替 pc 寄存器被存入。因为当前的 pc 是 <code>__unw_getcontext</code> 函数中某条指令的地址，所以当前的 pc 本身没有意义。</p>
+<pre><code>//
+// extern int __unw_getcontext(unw_context_t* thread_state)
+//
+// On entry:
+//  thread_state pointer is in x0
+//
+  .p2align 2
+DEFINE_LIBUNWIND_FUNCTION(__unw_getcontext)
+  stp    x0, x1,  [x0, #0x000]
+  stp    x2, x3,  [x0, #0x010]
+  stp    x4, x5,  [x0, #0x020]
+  stp    x6, x7,  [x0, #0x030]
+  stp    x8, x9,  [x0, #0x040]
+  stp    x10,x11, [x0, #0x050]
+  stp    x12,x13, [x0, #0x060]
+  stp    x14,x15, [x0, #0x070]
+  stp    x16,x17, [x0, #0x080]
+  stp    x18,x19, [x0, #0x090]
+  stp    x20,x21, [x0, #0x0A0]
+  stp    x22,x23, [x0, #0x0B0]
+  stp    x24,x25, [x0, #0x0C0]
+  stp    x26,x27, [x0, #0x0D0]
+  stp    x28,x29, [x0, #0x0E0]
+  str    x30,     [x0, #0x0F0]
+  mov    x1,sp
+  str    x1,      [x0, #0x0F8]
+  str    x30,     [x0, #0x100]    // store return address as pc
+  // skip cpsr
+  stp    d0, d1,  [x0, #0x110]
+  stp    d2, d3,  [x0, #0x120]
+  stp    d4, d5,  [x0, #0x130]
+  stp    d6, d7,  [x0, #0x140]
+  stp    d8, d9,  [x0, #0x150]
+  stp    d10,d11, [x0, #0x160]
+  stp    d12,d13, [x0, #0x170]
+  stp    d14,d15, [x0, #0x180]
+  stp    d16,d17, [x0, #0x190]
+  stp    d18,d19, [x0, #0x1A0]
+  stp    d20,d21, [x0, #0x1B0]
+  stp    d22,d23, [x0, #0x1C0]
+  stp    d24,d25, [x0, #0x1D0]
+  stp    d26,d27, [x0, #0x1E0]
+  stp    d28,d29, [x0, #0x1F0]
+  str    d30,     [x0, #0x200]
+  str    d31,     [x0, #0x208]
+  mov    x0, #0                   // return UNW_ESUCCESS
+  ret
+
+</code></pre>
+<ol start="2">
+<li>
+<h3 id="__unw_init_local读取-unwind_info获取-callee-saved-register-信息"><code>__unw_init_local</code>：读取 unwind_info，获取 callee saved register 信息</h3>
+</li>
+</ol>
+<p><code>__unw_init_local</code> 函数有两个参数，分别是 <code>&amp;context</code> 和 <code>&amp;cursor</code>，它做的事情是将 <code>context</code> 的信息拷贝一份到 <code>cursor</code> 这块内存里，同时读取 MachO 中 <code>__TEXT, __unwind_info</code> 中的信息，找到当前 PC 对应的 frame info 信息。这些信息用一个 <code>[unw_proc_info_t](https://www.nongnu.org/libunwind/man/unw_get_proc_info(3).html)</code> 结构体表示，包含函数的起始与结束地址、lsda、personality_routine 函数指针（用于寻找异常对应的 landing pad），还有包含了如何恢复 callee saved register 的 <a href="https://raw.githubusercontent.com/llvm-mirror/libunwind/master/include/mach-o/compact_unwind_encoding.h">compact unwind encoding</a> 信息。</p>
+<p><code>unw_proc_info_t</code> 也会被存到 <code>cursor</code> 中，在后面 <code>__unw_step</code> 做栈回退操作时被使用。</p>
+<ol start="3">
+<li>
+<h3 id="__unw_step改变备份在-cursor-中的寄存器信息完成一层栈回退"><code>__unw_step</code>：改变备份在 cursor 中的寄存器信息，完成一层栈回退</h3>
+</li>
+</ol>
+<p><code>__unw_step</code> 函数会改变备份在 cursor 中的寄存器信息，完成一层退栈操作。发生退栈操作时，需要解决两类问题：</p>
+<ol>
+<li>恢复 x19 - x28、d8 - d15 这几个 callee saved register</li>
+<li>正确设置四个重要的寄存器 pc、lr、fp、sp</li>
+</ol>
+<p>这也是 <code>__unw_step</code> 中重点体现的。</p>
+<h4 id="31-恢复-caller-saved-register">3.1 恢复 caller saved register</h4>
+<p><code>__unw_init_local</code> 时已经读取了用 <code>[unw_proc_info_t](https://www.nongnu.org/libunwind/man/unw_get_proc_info(3).html)</code> 结构体表示的 frame info 信息，其中包含了如何恢复 callee saved register 的 <a href="https://raw.githubusercontent.com/llvm-mirror/libunwind/master/include/mach-o/compact_unwind_encoding.h">compact unwind encoding</a> 信息。</p>
+<p>通过 unwind_info 中的信息，还原 x19 至 x28，d8 - d15 的 saved register。</p>
+<h4 id="32-处理四个特殊寄存器">3.2 处理四个特殊寄存器</h4>
+<p>处理特殊寄存器的源码分成了两种情况，分别是：</p>
+<pre><code> uint64_t fp = registers.getFP();
+ // fp points to old fp
+ registers.setFP(addressSpace.get64(fp));
+ // old sp is fp less saved fp and lr
+ registers.setSP(fp + 16);
+ // pop return address into pc
+ registers.setIP(addressSpace.get64(fp + 8));
+
+</code></pre>
+<pre><code> // subtract stack size off of sp
+ registers.setSP(savedRegisterLoc);
+
+ // set pc to be value in lr
+ registers.setIP(registers.getRegister(UNW_ARM64_LR));
+
+</code></pre>
+<p>为了理解这两段代码，我们需要首先需要理解函数调用过程中 pc、lr、sp、fp 这几个寄存器的变化。我们用一个例子总结一下：</p>
+<p>考虑函数 A 调用函数 B，函数 B 调用函数 C 的场景。</p>
+<pre><code>void funcC(void) {
+  printf(&quot;Hello World&quot;);
+}
+
+void funcB(void) {
+  funcC();
+}
+
+void funcA(void) {
+  funcB();
+}
+
+</code></pre>
+<p>这几个函数的反汇编代码是：</p>
+<pre><code>_funcC:
+sub    sp, sp, #0x20             ; =0x20 
+stp    x29, x30, [sp, #0x10]
+add    x29, sp, #0x10            ; =0x10 
+stur   wzr, [x29, #-0x4]
+adrp   x0, 1
+add    x0, x0, #0xd83            ; =0xd83 
+bl     0x100c3d968               ; symbol stub for: printf
+ldp    x29, x30, [sp, #0x10]
+add    sp, sp, #0x20             ; =0x20 
+ret    
+
+_funcB:
+sub    sp, sp, #0x20             ; =0x20 
+stp    x29, x30, [sp, #0x10]
+add    x29, sp, #0x10            ; =0x10 
+stur   wzr, [x29, #-0x4]
+bl     0x100c3c9e4               ; funcC at ViewController.m:425
+ldp    x29, x30, [sp, #0x10]
+add    sp, sp, #0x20             ; =0x20 
+ret    
+
+_funcA:
+sub    sp, sp, #0x20             ; =0x20 
+stp    x29, x30, [sp, #0x10]
+add    x29, sp, #0x10            ; =0x10 
+stur   wzr, [x29, #-0x4]
+bl     0x100c3ca0c               ; funcB at ViewController.m:430
+ldp    x29, x30, [sp, #0x10]
+add    sp, sp, #0x20             ; =0x20 
+ret    
+
+</code></pre>
+<p>我们重点看一下 B 调用 C 时做了什么，也就是高亮标注的几条指令：</p>
+<ul>
+<li>
+<p>首先，<code>**bl**</code> <code>_funcC</code> 这条指令，会将当前的 lr 寄存器设置为 C 应该返回的地址，即 <code>**bl**</code> <code>_funcC</code> 的下一条指令。同时，pc 寄存器也设置为了 C 函数第一条指令的地址，完成了跳转。</p>
+</li>
+<li>
+<p>然后，</p>
+</li>
+</ul>
+<pre><code>sub    sp, sp, #0x20             ; =0x20 
+stp    x29, x30, [sp, #0x10]
+
+</code></pre>
+<p>这两条指令，首先开辟了 0x20 大小的栈空间，然后将 x29(fp)，x30(lr) 寄存器的值，分别写入了栈内存（占用 0x10），剩下 0x10 给 C 函数的剩余部分使用。</p>
+<ul>
+<li>然后，<code>add x29, sp, #0x10 ; =0x10</code> 这条指令，将 sp + 0x10 的值写入到 fp。这时 fp 到 sp 的这段内存，就是 C 函数的函数栈空间。在这个例子中，</li>
+</ul>
+<p>此时栈内的状态为下图所示：</p>
+<figure data-type="image" tabindex="2"><img src="https://xushuangqing.github.io/post-images/ru-he-shi-xian-zhan-hui-tui-tiao-zhuan/2.jpg" alt="" loading="lazy"></figure>
+<p>当 C 函数正常返回时，执行的操作是：</p>
+<ul>
+<li><code>**ldp x29, x30, [sp, #0x10]**</code> 将之前存在栈内存中的 x29(fp)，x30(lr) 寄存器的值，恢复给 x29(fp)，x30(lr) 寄存器</li>
+<li><code>add sp, sp, #0x20 ; =0x20</code> 恢复 sp 寄存器，即图中示意的 SP(B) 的位置。</li>
+</ul>
+<p>所以，如果要通过修改这四个寄存器状态，在执行 C 的时候，达到“退栈”的目的，也就是回到 B 执行时的状态，需要这么设置：</p>
+<p>newPC = LR(C) = LR</p>
+<p>newSP = SP(B) = *FP(C)+0x10 = *FP+0x10</p>
+<p>newFP = FP(B) = *FP(C) = *FP</p>
+<p>newLR = LR(B) = *(FP(B)+0x08) = <em>(</em>(FP(C))+0x08) = *(*FP+0x08)，但是由于 B 函数在返回前会从内存中读出 LR(B) 的值加载到 LR 寄存器中，所以这里不做设置也可以。</p>
+<p>所以，这个设置方案和 <code>__unw_step</code> 中的代码也可以对上了：</p>
+<pre><code> uint64_t fp = registers.getFP();
+ // fp points to old fp
+ registers.setFP(addressSpace.get64(fp));
+ // old sp is fp less saved fp and lr
+ registers.setSP(fp + 16);
+ // pop return address into pc
+ registers.setIP(addressSpace.get64(fp + 8));
+
+</code></pre>
+<p>如果 C 函数是一个叶子函数（即 C 不再调用其他函数），那么情况就又有点变化。由于 C 不会调用其他函数，所以 C 的执行过程中，LR 和 FP 寄存器不会再改变了，因此，在 C 函数的开头，它不再需要将 LR 和 FP 寄存器备份在栈内存里。此时 C 的反汇编代码是：</p>
+<pre><code>void funcC(void) {
+  int c = 0;
+}
+
+_funcC:
+sub    sp, sp, #0x10             ; =0x10 
+str    wzr, [sp, #0xc]
+add    sp, sp, #0x10             ; =0x10 
+ret    
+
+</code></pre>
+<p>此时的栈内的状态为：</p>
+<figure data-type="image" tabindex="3"><img src="https://xushuangqing.github.io/post-images/ru-he-shi-xian-zhan-hui-tui-tiao-zhuan/3.jpg" alt="" loading="lazy"></figure>
+<p>如果在 C 的执行过程中，要“退栈”到 B 的状态，需要这么设置：</p>
+<p>newPC = LR(C) = LR</p>
+<p>newSP = SP(B) = ？</p>
+<p>FP 和 LR 由于在调用 C 时都没有发生变化，因此不需要设置。</p>
+<p>这里 newSP 的值看似无法计算，但实际上编译器知道 C 调用期间 SP 需要发生什么样的变化，编译器会把这个信息记录在 unwind_info 中，libunwind 通过 unwind_info 中记录的信息可以算出 newSP 的值。</p>
+<pre><code> // subtract stack size off of sp
+ registers.setSP(savedRegisterLoc);
+
+ // set pc to be value in lr
+ registers.setIP(registers.getRegister(UNW_ARM64_LR));
+
+</code></pre>
+<h4 id="33-更新-pc-的同时更新-frame-info-信息">3.3 更新 PC 的同时更新 frame info 信息</h4>
+<p>在调用 <code>registers.setIP</code> 更新 cursor 中的 PC 寄存器时，还会触发一个隐藏操作：将 frame info 更新成新 PC 对应的 frame info（<a href="https://www.nongnu.org/libunwind/man/unw_get_proc_info(3).html">unw_proc_info_t</a>）。确保下一次 <code>__unw_step</code> 或其他操作时的状态正确。</p>
+<ol start="4">
+<li>
+<h3 id="设置备份在栈内存上的-pc-寄存器使其指向目标地址">设置备份在栈内存上的 PC 寄存器，使其指向目标地址</h3>
+</li>
+</ol>
+<p>寻找目标地址的工作，是 <a href="https://github.com/apple/llvm-project/blob/7ca7a2547f00e34f5ec91be776a1d0bbca74b7a9/libcxxabi/src/cxa_personality.cpp#L933">__gxx_personality_v0</a> 函数实现的，它属于 exception handling 的 Level 2 API，我们也可以找到<a href="https://github.com/apple/llvm-project/blob/7ca7a2547f00e34f5ec91be776a1d0bbca74b7a9/libcxxabi/src/cxa_personality.cpp#L933">源码</a> 。对于 libunwind 来说，这里，它的 <code>_Unwind_SetIP</code> 函数被调用了。这个函数修改了备份在 cursor 中的 PC，使其指向跳转的目标地址，即例子中的 catch handler。</p>
+<ol start="5">
+<li>
+<h3 id="__unw_resume恢复寄存器完成跳转"><code>__unw_resume</code>：恢复寄存器，完成跳转</h3>
+</li>
+</ol>
+<p>至此，我们已经在 cursor 中准备好了跳转后的寄存器状态。接下来就是将这些暂时存在内存中的值，重新加载到寄存器上。</p>
+<p><code>__unw_resume</code> 函数是跳转的最后一步，它最终调用了一个用汇编写的函数 <code>jumpto</code>，这个函数不断用 load 指令将暂存在内存中的值重新加载到寄存器上。</p>
+<pre><code>
+//
+// extern &quot;C&quot; void __libunwind_Registers_arm64_jumpto(Registers_arm64 *);
+//
+// On entry:
+// thread_state pointer is in x0
+//
+ .p2align 2
+DEFINE_LIBUNWIND_FUNCTION(__libunwind_Registers_arm64_jumpto)
+ // skip restore of x0,x1 for now
+ ldp  x2, x3, [x0, #0x010]
+ ldp  x4, x5, [x0, #0x020]
+ ldp  x6, x7, [x0, #0x030]
+ ldp  x8, x9, [x0, #0x040]
+ ldp  x10,x11, [x0, #0x050]
+ ldp  x12,x13, [x0, #0x060]
+ ldp  x14,x15, [x0, #0x070]
+ // x16 and x17 were clobbered by the call into the unwinder, so no point in
+ // restoring them.
+ ldp  x18,x19, [x0, #0x090]
+ ldp  x20,x21, [x0, #0x0A0]
+ ldp  x22,x23, [x0, #0x0B0]
+ ldp  x24,x25, [x0, #0x0C0]
+ ldp  x26,x27, [x0, #0x0D0]
+ ldp  x28,x29, [x0, #0x0E0]
+ ldr  x30,   [x0, #0x100] // restore pc into lr
+
+ ldp  d0, d1, [x0, #0x110]
+ ldp  d2, d3, [x0, #0x120]
+ ldp  d4, d5, [x0, #0x130]
+ ldp  d6, d7, [x0, #0x140]
+ ldp  d8, d9, [x0, #0x150]
+ ldp  d10,d11, [x0, #0x160]
+ ldp  d12,d13, [x0, #0x170]
+ ldp  d14,d15, [x0, #0x180]
+ ldp  d16,d17, [x0, #0x190]
+ ldp  d18,d19, [x0, #0x1A0]
+ ldp  d20,d21, [x0, #0x1B0]
+ ldp  d22,d23, [x0, #0x1C0]
+ ldp  d24,d25, [x0, #0x1D0]
+ ldp  d26,d27, [x0, #0x1E0]
+ ldp  d28,d29, [x0, #0x1F0]
+ ldr  d30,   [x0, #0x200]
+ ldr  d31,   [x0, #0x208]
+
+ // Finally, restore sp. This must be done after the the last read from the
+ // context struct, because it is allocated on the stack, and an exception
+ // could clobber the de-allocated portion of the stack after sp has been
+ // restored.
+ ldr  x16,   [x0, #0x0F8]
+ ldp  x0, x1, [x0, #0x000] // restore x0,x1
+ mov  sp,x16         // restore sp
+ ret  x30          // jump to pc
+
+</code></pre>
+<p>其中有一些特殊处理的地方：</p>
+<ul>
+<li>x16 和 x17 由于是临时寄存器，所以不需要恢复，x16 寄存器还在最后关头被用于恢复 sp 寄存器</li>
+<li>x0 由于 <code>jumpto</code> 函数的参数，所以它需要在最后被恢复。</li>
+<li>内存中为 PC 寄存器准备的值被赋值给了 lr(x30)，这样当 <code>jumpto</code> 返回的时候，就直接跳转到了设计好的 PC 处，即例子中的 catch handler。</li>
+</ul>
+<p>当这一行 ret 执行过后，程序就完成了穿越。此刻，它可能正在某个 catch 块中执行业务逻辑（正如例子中的情况），也可能在帮某一栈帧完成析构等清理工作。</p>
+<h2 id="参考资料">参考资料</h2>
+<p><a href="https://github.com/apple/llvm-project/tree/7ca7a2547f00e34f5ec91be776a1d0bbca74b7a9/libunwind">libunwind 源码</a></p>
+<p><a href="https://maskray.me/blog/2020-12-12-c++-exception-handling-abi">C++ exception handling</a> <a href="https://maskray.me/blog/2020-12-12-c++-exception-handling-abi">ABI</a></p>
+<p><a href="https://developer.arm.com/documentation/102374/0101/Procedure-Call-Standard">AArch64 Instruction Set Architecture</a></p>
+]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[《SICP》读书笔记]]></title>
         <id>https://xushuangqing.github.io/post/《SICP》-du-shu-bi-ji/</id>
@@ -1065,134 +1447,6 @@ https://developer.apple.com/library/archive/qa/qa1795/_index.html</p>
 <p>比如，由于 app slicing 的存在，图标应该尽可能用 asset catalog 管理起来。所以试图用 webp 等格式来替代 asset catalog，可能是负向收益。<br>
 （这个思路经过实验，结论是，在我们的业务场景下，如果用 webp 替代 asset catalog，对于 2x 设备的 Download Size 是负向收益，因为 2x 设备不得不使用 3x 的图片，并且 webp 图的压缩率比 asset catalog 低很多）</p>
 <p>再比如，不要幻想抛弃 armv7 架构的设备，可以减小包大小。苹果已经帮开发者做过这一步了。</p>
-]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[YYThreadSafeArray在多线程方面的若干问题]]></title>
-        <id>https://xushuangqing.github.io/post/YYThreadSafeArray-zai-duo-xian-cheng-fang-mian-de-ruo-gan-wen-ti--1/</id>
-        <link href="https://xushuangqing.github.io/post/YYThreadSafeArray-zai-duo-xian-cheng-fang-mian-de-ruo-gan-wen-ti--1/">
-        </link>
-        <updated>2019-03-13T03:39:43.000Z</updated>
-        <content type="html"><![CDATA[<p>YYThreadSafeArray是YYKit中的一个工具类，旨在提供线程安全的数组。YYThreadSafeArray的原理是继承NSMutableArray的，并且对其中必要的方法加锁来保证线程安全。但是，虽然YYKit在开源界使用广泛，但是YYThreadSafeArray依然有一些多线程方面的问题。其中部分问题在我们的项目中暴露和修复。</p>
-<h2 id="问题1调用枚举方法导致死锁">问题1：调用枚举方法导致死锁</h2>
-<h3 id="调用方式">调用方式：</h3>
-<pre><code>YYThreadSafeArray *array = [[YYThreadSafeArray alloc] initWithObjects:@&quot;hello world&quot;, nil];
-[array enumerateObjectsUsingBlock:^(id  _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
-    [array count];
-}];
-</code></pre>
-<h3 id="导致问题">导致问题：</h3>
-<p>死锁。<br>
-<img src="https://xushuangqing.github.io/post-images/YYThreadSafeArray-zai-duo-xian-cheng-fang-mian-de-ruo-gan-wen-ti--1/164542-80536b0d88d6fd5d.png" alt="" loading="lazy"></p>
-<h3 id="原因分析">原因分析：</h3>
-<p>YYThreadSafeArray使用加锁的方式保证线程安全。加的锁是信号量：dispatch_semaphore。</p>
-<pre><code>#define LOCK(...) dispatch_semaphore_wait(_lock, DISPATCH_TIME_FOREVER); \
-__VA_ARGS__; \
-dispatch_semaphore_signal(_lock);
-</code></pre>
-<p>dispatch_semaphore并不是可重入的。因此，遇到重入的情况，就会发生死锁问题。举的例子只是其中一个死锁场景。</p>
-<p>YY选择使用dispatch_semaphore的原因，可能是判断dispatch_semaphore的执行效率较高。可以参考YY对各种锁的效率测评：https://blog.ibireme.com/2016/01/16/spinlock_is_unsafe_in_ios/</p>
-<h3 id="修复方法">修复方法：</h3>
-<p>使用pthread_mutex替代dispatch_semaphore。pthread_mutex有参数可以设置为可重入。在YY测试的执行效率上，可重入的pthread_mutex是可重入锁中效率较高的一个。</p>
-<h2 id="问题2判等导致死锁">问题2：判等导致死锁</h2>
-<p>在使用pthread_mutex替代dispatch_semaphore的方式修复了可重入锁的问题后，我们发现YYThreadSafeArray在判等处的代码是有死锁隐患的。</p>
-<h3 id="调用方式-2">调用方式：</h3>
-<pre><code>YYThreadSafeArray *threadSafeArrayA = [[YYThreadSafeArray alloc] init];
-YYThreadSafeArray *threadSafeArrayB = [[YYThreadSafeArray alloc] init];
-for (int i = 0; i &lt; 1000000; i++) {
-    [threadSafeArrayA addObject:@(i)];
-    [threadSafeArrayB addObject:@(i)];
-}
-    
-for (int i = 0; i &lt; 10000; i++) {
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        [threadSafeArrayB isEqualToArray:threadSafeArrayA];
-    });
-    [threadSafeArrayA isEqualToArray:threadSafeArrayB];
-}
-</code></pre>
-<p>如果两个线程中，同时分别执行</p>
-<pre><code> [A isEqualToArray:B];
-</code></pre>
-<p>和</p>
-<pre><code> [B isEqualToArray:A];
-</code></pre>
-<p>则会有一定概率死锁。</p>
-<h3 id="原因分析-2">原因分析：</h3>
-<p>我们查看YYThreadSafeArray中isEqualToArray方法的源码：</p>
-<pre><code>- (BOOL)isEqualToArray:(NSArray *)otherArray {
-    if (otherArray == self) return YES;
-    if ([otherArray isKindOfClass:YYThreadSafeArray.class]) {
-        YYThreadSafeArray *other = (id)otherArray;
-        BOOL isEqual;
-        dispatch_semaphore_wait(_lock, DISPATCH_TIME_FOREVER);
-        dispatch_semaphore_wait(other-&gt;_lock, DISPATCH_TIME_FOREVER);
-        isEqual = [_arr isEqualToArray:other-&gt;_arr];
-        dispatch_semaphore_signal(other-&gt;_lock);
-        dispatch_semaphore_signal(_lock);
-        return isEqual;
-    }
-    return NO;
-}
-</code></pre>
-<p>在线程1中调用</p>
-<pre><code> [A isEqualToArray:B];
-</code></pre>
-<p>此时，执行完</p>
-<pre><code>dispatch_semaphore_wait(_lock, DISPATCH_TIME_FOREVER);
-</code></pre>
-<p>这行，A的_lock锁进入锁住状态。</p>
-<p>同时，线程2调用</p>
-<pre><code> [B isEqualToArray:A];
-</code></pre>
-<p>执行完</p>
-<pre><code>dispatch_semaphore_wait(_lock, DISPATCH_TIME_FOREVER);
-</code></pre>
-<p>这行，B的_lock锁也进入锁住状态。</p>
-<p>那么线程1在执行下一行</p>
-<pre><code>dispatch_semaphore_wait(other-&gt;_lock, DISPATCH_TIME_FOREVER);
-</code></pre>
-<p>时，由于<code>B -&gt;_lock</code>已经被锁住，线程1不得不阻塞在此，等待B的锁被解锁。<br>
-而同时，B也在执行同一行代码时，在等待A的锁被解锁。<br>
-这就造成了死锁的情形。</p>
-<p>代码类似的<code>isEqual:</code>方法也有一样的问题。</p>
-<h3 id="修复方法-2">修复方法：</h3>
-<p>为了修复这个场景，我们引入了一个新的全局的锁，将整个方法锁起来，防止两个线程同时进入<code>isEqualToArray:</code>方法中。</p>
-<h2 id="问题3for-in循环的线程不安全">问题3：for-in循环的线程不安全</h2>
-<p>YYThreadSafeArray在只用for-in循环时，是无法保证线程安全的。</p>
-<h3 id="调用方式-3">调用方式：</h3>
-<pre><code>YYThreadSafeArray *threadSafeArray = [[YYThreadSafeArray alloc] init];
-for (int i = 0; i &lt; 1000000; i++) {
-    [threadSafeArray addObject:@(i)];
-}
-dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-    for (int i = 0; i &lt; 100000; i++) {
-        [threadSafeArray removeLastObject];
-    }
-});
-for (id obj in threadSafeArray) {
-    (void)obj;
-}
-</code></pre>
-<p>此时大概率会抛出异常：</p>
-<pre><code>*** Terminating app due to uncaught exception 'NSGenericException', reason: '*** Collection &lt;YYThreadSafeArray: 0x60000165aa20&gt; was mutated while being enumerated.'
-</code></pre>
-<h3 id="原因分析-3">原因分析：</h3>
-<p>在执行for-in循环时，会调用NSArray的</p>
-<pre><code>- (NSUInteger)countByEnumeratingWithState:(NSFastEnumerationState *)state
-                                  objects:(id __unsafe_unretained[])stackbuf
-                                    count:(NSUInteger)len;
-</code></pre>
-<p>方法。</p>
-<p>for-in循环之所以有更高的效率，是因为在循环时，它并非每次都访问NSArray数组，而是直接将一段NSArray数组，当作一个C数组来访问，直接便利这个C数组。对于NSArray来说，<code>state.itemsPtr</code>字段将返回这个C数组的指针。</p>
-<p>但在这个方法中加锁，锁住的只是寻找这个C数组的过程，并不能锁住整个for-in循环过程。所以，当多线程进入时，会抛出<code>was mutated while being enumerated</code>异常。</p>
-<h3 id="修复方法-3">修复方法：</h3>
-<p>这个问题没有想到优雅的修复方法。有2种不怎么优雅的方式可选：</p>
-<ol>
-<li>让调用方用enumerateObjectsUsingBlock这种遍历方法替代for-in循环，但在效率上肯定有折损；</li>
-<li>将YYThreadSafeArray种的锁暴露出去，让业务方在for-in循环时自行加锁。</li>
-</ol>
-<p>但这两种方法都依赖于调用方以一个特定的姿势来调用。如果调用姿势无法保证，YYThreadSafeArray也无法保证线程安全了。</p>
 ]]></content>
     </entry>
 </feed>
